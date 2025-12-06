@@ -3,32 +3,31 @@
 /**
  * Stock Pattern History Calculator
  *
- * This script fetches historical earnings data and calculates pattern accuracy
+ * This script uses static earnings dates and calculates pattern accuracy
  * for stock pairs (trigger → echo relationships).
  *
  * Uses:
- * - Finnhub API: For earnings data (/stock/earnings)
+ * - Static earnings dates: src/data/earnings-dates.json
  * - Tiingo API: For historical daily close prices
  *
- * Usage: FINNHUB_API_KEY=your_key TIINGO_API_KEY=your_key node scripts/calculate-pattern-history.js
+ * Usage: TIINGO_API_KEY=your_key node scripts/calculate-pattern-history.js
  */
 
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
+// Static earnings dates (no API needed)
+const earningsDates = require('../src/data/earnings-dates.json');
+
 // Configuration
-const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 const TIINGO_BASE_URL = 'https://api.tiingo.com/tiingo/daily';
-const EARNINGS_LIMIT = 8; // Last 8 earnings to fetch
 
 // Stock pairs to analyze: [triggerSymbol, echoSymbol]
+// Only pairs with static earnings dates in src/data/earnings-dates.json
 const STOCK_PAIRS = [
   { id: 'AMD_NVDA', trigger: 'AMD', echo: 'NVDA' },
-  { id: 'JPM_BAC', trigger: 'JPM', echo: 'BAC' },
-  { id: 'TSLA_F', trigger: 'TSLA', echo: 'F' },
-  { id: 'AAPL_MSFT', trigger: 'AAPL', echo: 'MSFT' },
-  { id: 'XOM_CVX', trigger: 'XOM', echo: 'CVX' }
+  { id: 'JPM_BAC', trigger: 'JPM', echo: 'BAC' }
 ];
 
 // Accuracy thresholds
@@ -45,47 +44,35 @@ const MIN_SAMPLE_SIZE = 4; // Minimum samples for stats calculation
  * Get API keys from environment
  */
 function getApiKeys() {
-  const finnhubKey = process.env.FINNHUB_API_KEY;
   const tiingoKey = process.env.TIINGO_API_KEY;
 
-  if (!finnhubKey) {
-    console.error('Error: FINNHUB_API_KEY environment variable is not set.');
-    console.error('Please set it before running this script:');
-    console.error('  export FINNHUB_API_KEY=your_api_key_here');
-    process.exit(1);
-  }
-
   if (!tiingoKey) {
-    console.error('Error: TIINGO_API_KEY environment variable is not set.');
-    console.error('Please set it before running this script:');
-    console.error('  export TIINGO_API_KEY=your_api_key_here');
-    process.exit(1);
+    console.warn('Warning: TIINGO_API_KEY not set. Price echo analysis will be skipped.');
+    console.warn('Only fundamental echo (avgGapDays) will be calculated.\n');
   }
 
-  return { finnhubKey, tiingoKey };
+  return { tiingoKey };
 }
 
 /**
- * Fetch earnings history for a stock (uses Finnhub)
+ * Get earnings dates from static data (replaces API call)
  */
-async function fetchEarningsHistory(symbol, finnhubKey) {
-  const url = `${FINNHUB_BASE_URL}/stock/earnings`;
-
-  try {
-    const response = await axios.get(url, {
-      params: {
-        symbol,
-        limit: EARNINGS_LIMIT,
-        token: finnhubKey
-      }
-    });
-
-    return response.data || [];
-  } catch (error) {
-    console.error(`Error fetching earnings for ${symbol}:`, error.message);
+function getEarningsDates(symbol) {
+  const dates = earningsDates[symbol];
+  if (!dates) {
+    console.warn(`No earnings dates for ${symbol}`);
     return [];
   }
+  return dates.map(item => ({
+    period: item.date,
+    date: item.date,
+    fiscalQuarter: `${item.year}-Q${item.quarter}`,
+    actual: null,
+    estimate: null,
+    surprisePercent: null
+  }));
 }
+
 
 /**
  * Fetch historical daily prices from Tiingo API
@@ -302,7 +289,7 @@ function matchQuarterlyEarnings(symbolA, earningsA, symbolB, earningsB) {
 
     // Skip if either company missing data for this quarter
     if (!dataA || !dataB) continue;
-    if (dataA.surprisePercent === null || dataB.surprisePercent === null) continue;
+    // Note: We allow null surprisePercent for static data to still calculate avgGapDays
 
     // Determine which reports first (trigger) and second (echo)
     let trigger, echo;
@@ -330,8 +317,8 @@ function matchQuarterlyEarnings(symbolA, earningsA, symbolB, earningsB) {
     const triggerResult = getEarningsResult(trigger.surprisePercent);
     const echoResult = getEarningsResult(echo.surprisePercent);
 
-    // Determine agreement (same result direction)
-    const agreement = triggerResult === echoResult;
+    // Determine agreement (same result direction) - null if no surprise data
+    const agreement = (triggerResult && echoResult) ? triggerResult === echoResult : null;
 
     // Parse quarter for display (e.g., "2024-Q3" → "Q3 2024")
     const [year, q] = key.split('-');
@@ -366,7 +353,7 @@ function matchQuarterlyEarnings(symbolA, earningsA, symbolB, earningsB) {
  * Calculate fundamental echo statistics from matched quarters
  */
 function calculateFundamentalEchoStats(matchedQuarters) {
-  if (matchedQuarters.length < MIN_SAMPLE_SIZE) {
+  if (matchedQuarters.length === 0) {
     return null;
   }
 
@@ -376,19 +363,29 @@ function calculateFundamentalEchoStats(matchedQuarters) {
   let triggerMisses = 0;
   let echoMissesWhenTriggerMisses = 0;
   let agreements = 0;
+  let agreementCount = 0;
 
   const triggerSurprises = [];
   const echoSurprises = [];
   let totalGapDays = 0;
 
   for (const q of matchedQuarters) {
-    // Collect for correlation
-    triggerSurprises.push(q.triggerSurprisePercent);
-    echoSurprises.push(q.echoSurprisePercent);
+    // Always collect gap days
     totalGapDays += q.gapDays;
 
-    // Track agreement
-    if (q.agreement) agreements++;
+    // Only collect surprise data if available
+    if (q.triggerSurprisePercent !== null) {
+      triggerSurprises.push(q.triggerSurprisePercent);
+    }
+    if (q.echoSurprisePercent !== null) {
+      echoSurprises.push(q.echoSurprisePercent);
+    }
+
+    // Track agreement (only count if both have results)
+    if (q.agreement !== null) {
+      agreementCount++;
+      if (q.agreement) agreements++;
+    }
 
     // Beat follows beat
     if (q.triggerResult === 'Beat') {
@@ -407,7 +404,7 @@ function calculateFundamentalEchoStats(matchedQuarters) {
     }
   }
 
-  // Calculate probabilities
+  // Calculate probabilities (only if we have data)
   const beatFollowsBeat = triggerBeats > 0
     ? Math.round((echoBeatsWhenTriggerBeats / triggerBeats) * 100) / 100
     : null;
@@ -416,10 +413,14 @@ function calculateFundamentalEchoStats(matchedQuarters) {
     ? Math.round((echoMissesWhenTriggerMisses / triggerMisses) * 100) / 100
     : null;
 
-  const directionAgreement = Math.round((agreements / matchedQuarters.length) * 100) / 100;
+  const directionAgreement = agreementCount > 0
+    ? Math.round((agreements / agreementCount) * 100) / 100
+    : null;
 
   // Calculate correlation between surprise percentages
-  const fundamentalCorrelation = calculateCorrelation(triggerSurprises, echoSurprises);
+  const fundamentalCorrelation = (triggerSurprises.length >= MIN_SAMPLE_SIZE && echoSurprises.length >= MIN_SAMPLE_SIZE)
+    ? calculateCorrelation(triggerSurprises, echoSurprises)
+    : null;
 
   const avgGapDays = Math.round(totalGapDays / matchedQuarters.length);
 
@@ -532,13 +533,13 @@ function calculateStats(history) {
 /**
  * Process a single stock pair - calculates both price echo and fundamental echo
  */
-async function processStockPair(pair, finnhubKey, tiingoKey) {
+async function processStockPair(pair, tiingoKey) {
   console.log(`\nProcessing ${pair.id} (${pair.trigger} → ${pair.echo})...`);
 
-  // Fetch earnings history for BOTH stocks (uses Finnhub)
-  console.log(`  Fetching earnings for ${pair.trigger} and ${pair.echo}...`);
-  const triggerEarnings = await fetchEarningsHistory(pair.trigger, finnhubKey);
-  const echoEarnings = await fetchEarningsHistory(pair.echo, finnhubKey);
+  // Get earnings dates from static data
+  console.log(`  Loading earnings dates for ${pair.trigger} and ${pair.echo}...`);
+  const triggerEarnings = getEarningsDates(pair.trigger);
+  const echoEarnings = getEarningsDates(pair.echo);
 
   const emptyPriceEcho = {
     history: [],
@@ -583,7 +584,9 @@ async function processStockPair(pair, finnhubKey, tiingoKey) {
 
     for (const q of matchedQuarters) {
       const warning = q.warning ? ` [WARNING: ${q.warning}]` : '';
-      console.log(`    ${q.quarter}: ${q.triggerSymbol} ${q.triggerResult} (${q.triggerSurprisePercent}%) → ${q.echoSymbol} ${q.echoResult} (${q.echoSurprisePercent}%), Gap: ${q.gapDays}d, Agreement: ${q.agreement}${warning}`);
+      const triggerInfo = q.triggerResult ? `${q.triggerResult} (${q.triggerSurprisePercent}%)` : 'N/A';
+      const echoInfo = q.echoResult ? `${q.echoResult} (${q.echoSurprisePercent}%)` : 'N/A';
+      console.log(`    ${q.quarter}: ${q.triggerSymbol} ${triggerInfo} → ${q.echoSymbol} ${echoInfo}, Gap: ${q.gapDays}d${warning}`);
     }
 
     const fundamentalStats = calculateFundamentalEchoStats(matchedQuarters);
@@ -607,13 +610,22 @@ async function processStockPair(pair, finnhubKey, tiingoKey) {
   // ========================================
   console.log(`\n  --- Price Echo Analysis ---`);
 
+  // Skip price echo if no Tiingo API key
+  if (!tiingoKey) {
+    console.log(`  Skipped (TIINGO_API_KEY not set)`);
+    return {
+      priceEcho: emptyPriceEcho,
+      fundamentalEcho
+    };
+  }
+
   // Extract all earnings dates and find date range
-  const earningsDates = triggerEarnings
+  const triggerDates = triggerEarnings
     .map(e => e.period || e.date)
     .filter(d => d)
     .sort();
 
-  if (earningsDates.length === 0) {
+  if (triggerDates.length === 0) {
     console.log(`  No valid earnings dates found`);
     return {
       priceEcho: emptyPriceEcho,
@@ -621,9 +633,9 @@ async function processStockPair(pair, finnhubKey, tiingoKey) {
     };
   }
 
-  const earliestDate = earningsDates[0];
+  const earliestDate = triggerDates[0];
   // Add 10 days buffer to endDate to capture D+1 for the latest earnings
-  const latestDate = new Date(earningsDates[earningsDates.length - 1]);
+  const latestDate = new Date(triggerDates[triggerDates.length - 1]);
   latestDate.setDate(latestDate.getDate() + 10);
   const endDate = latestDate.toISOString().split('T')[0];
 
@@ -705,15 +717,15 @@ async function main() {
   console.log('Stock Pattern History Calculator');
   console.log('=================================\n');
 
-  const { finnhubKey, tiingoKey } = getApiKeys();
-  console.log('API keys found. Starting analysis...');
-  console.log('  - Finnhub: For earnings data (both trigger and echo stocks)');
+  const { tiingoKey } = getApiKeys();
+  console.log('Starting analysis...');
+  console.log('  - Earnings dates: Static data from src/data/earnings-dates.json');
   console.log('  - Tiingo: For historical prices (echo stock)');
 
   const results = {};
 
   for (const pair of STOCK_PAIRS) {
-    results[pair.id] = await processStockPair(pair, finnhubKey, tiingoKey);
+    results[pair.id] = await processStockPair(pair, tiingoKey);
   }
 
   // Write results to JSON file
