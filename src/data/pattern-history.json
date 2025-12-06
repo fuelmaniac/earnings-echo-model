@@ -1,0 +1,212 @@
+{
+  "AMD_NVDA": {
+    "history": [
+      {
+        "quarter": "Q3 2025",
+        "date": "2025-09-30",
+        "triggerResult": "Beat",
+        "triggerSurprisePercent": 2.1,
+        "echoMovePercent": null,
+        "accurate": false
+      },
+      {
+        "quarter": "Q2 2025",
+        "date": "2025-06-30",
+        "triggerResult": "Miss",
+        "triggerSurprisePercent": -3.2,
+        "echoMovePercent": null,
+        "accurate": false
+      },
+      {
+        "quarter": "Q1 2025",
+        "date": "2025-03-31",
+        "triggerResult": "Inline",
+        "triggerSurprisePercent": 0.8,
+        "echoMovePercent": null,
+        "accurate": false
+      },
+      {
+        "quarter": "Q4 2024",
+        "date": "2024-12-31",
+        "triggerResult": "Inline",
+        "triggerSurprisePercent": 0.1,
+        "echoMovePercent": null,
+        "accurate": false
+      }
+    ],
+    "stats": {
+      "correlation": null,
+      "accuracy": 0,
+      "avgEchoMove": 0,
+      "sampleSize": 0
+    }
+  },
+  "JPM_BAC": {
+    "history": [
+      {
+        "quarter": "Q3 2025",
+        "date": "2025-09-30",
+        "triggerResult": "Beat",
+        "triggerSurprisePercent": 3.8,
+        "echoMovePercent": null,
+        "accurate": false
+      },
+      {
+        "quarter": "Q2 2025",
+        "date": "2025-06-30",
+        "triggerResult": "Beat",
+        "triggerSurprisePercent": 9.6,
+        "echoMovePercent": null,
+        "accurate": false
+      },
+      {
+        "quarter": "Q1 2025",
+        "date": "2025-03-31",
+        "triggerResult": "Beat",
+        "triggerSurprisePercent": 5.4,
+        "echoMovePercent": null,
+        "accurate": false
+      },
+      {
+        "quarter": "Q4 2024",
+        "date": "2024-12-31",
+        "triggerResult": "Beat",
+        "triggerSurprisePercent": 15.9,
+        "echoMovePercent": null,
+        "accurate": false
+      }
+    ],
+    "stats": {
+      "correlation": null,
+      "accuracy": 0,
+      "avgEchoMove": 0,
+      "sampleSize": 0
+    }
+  },
+  "TSLA_F": {
+    "history": [
+      {
+        "quarter": "Q3 2025",
+        "date": "2025-09-30",
+        "triggerResult": "Miss",
+        "triggerSurprisePercent": -10.5,
+        "echoMovePercent": null,
+        "accurate": false
+      },
+      {
+        "quarter": "Q2 2025",
+        "date": "2025-06-30",
+        "triggerResult": "Miss",
+        "triggerSurprisePercent": -8.5,
+        "echoMovePercent": null,
+        "accurate": false
+      },
+      {
+        "quarter": "Q1 2025",
+        "date": "2025-03-31",
+        "triggerResult": "Miss",
+        "triggerSurprisePercent": -32.3,
+        "echoMovePercent": null,
+        "accurate": false
+      },
+      {
+        "quarter": "Q4 2024",
+        "date": "2024-12-31",
+        "triggerResult": "Miss",
+        "triggerSurprisePercent": -6.1,
+        "echoMovePercent": null,
+        "accurate": false
+      }
+    ],
+    "stats": {
+      "correlation": null,
+      "accuracy": 0,
+      "avgEchoMove": 0,
+      "sampleSize": 0
+    }
+  },
+  "AAPL_MSFT": {
+    "history": [
+      {
+        "quarter": "Q3 2025",
+        "date": "2025-09-30",
+        "triggerResult": "Beat",
+        "triggerSurprisePercent": 2.4,
+        "echoMovePercent": null,
+        "accurate": false
+      },
+      {
+        "quarter": "Q2 2025",
+        "date": "2025-06-30",
+        "triggerResult": "Beat",
+        "triggerSurprisePercent": 7.3,
+        "echoMovePercent": null,
+        "accurate": false
+      },
+      {
+        "quarter": "Q1 2025",
+        "date": "2025-03-31",
+        "triggerResult": "Inline",
+        "triggerSurprisePercent": -0.6,
+        "echoMovePercent": null,
+        "accurate": false
+      },
+      {
+        "quarter": "Q4 2024",
+        "date": "2024-12-31",
+        "triggerResult": "Inline",
+        "triggerSurprisePercent": 0.2,
+        "echoMovePercent": null,
+        "accurate": false
+      }
+    ],
+    "stats": {
+      "correlation": null,
+      "accuracy": 0,
+      "avgEchoMove": 0,
+      "sampleSize": 0
+    }
+  },
+  "XOM_CVX": {
+    "history": [
+      {
+        "quarter": "Q3 2025",
+        "date": "2025-09-30",
+        "triggerResult": "Beat",
+        "triggerSurprisePercent": 2.4,
+        "echoMovePercent": null,
+        "accurate": false
+      },
+      {
+        "quarter": "Q2 2025",
+        "date": "2025-06-30",
+        "triggerResult": "Beat",
+        "triggerSurprisePercent": 5.1,
+        "echoMovePercent": null,
+        "accurate": false
+      },
+      {
+        "quarter": "Q1 2025",
+        "date": "2025-03-31",
+        "triggerResult": "Inline",
+        "triggerSurprisePercent": 0.8,
+        "echoMovePercent": null,
+        "accurate": false
+      },
+      {
+        "quarter": "Q4 2024",
+        "date": "2024-12-31",
+        "triggerResult": "Beat",
+        "triggerSurprisePercent": 5.8,
+        "echoMovePercent": null,
+        "accurate": false
+      }
+    ],
+    "stats": {
+      "correlation": null,
+      "accuracy": 0,
+      "avgEchoMove": 0,
+      "sampleSize": 0
+    }
+  }
+}
