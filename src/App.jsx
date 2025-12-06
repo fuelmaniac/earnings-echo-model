@@ -259,8 +259,9 @@ function SignalCard({ card, prices, onSetAlert }) {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [feedback, setFeedback] = useState(null)
 
-  // Fetch live stock quote for the trigger (leader) stock
-  const { data: quoteData, loading: quoteLoading, error: quoteError } = useStockQuote(card.trigger)
+  // Fetch live stock quotes for both leader and follower stocks
+  const { data: leaderQuote, loading: leaderLoading, error: leaderError } = useStockQuote(card.trigger)
+  const { data: followerQuote, loading: followerLoading, error: followerError } = useStockQuote(card.echo)
 
   const getConfidenceColor = (confidence) => {
     switch (confidence) {
@@ -297,30 +298,50 @@ function SignalCard({ card, prices, onSetAlert }) {
 
       {/* Live Prices */}
       <div className="flex gap-4 mb-4">
+        {/* Leader/Trigger Stock */}
         <div className="flex-1 bg-gray-700/50 rounded-lg p-3">
           <div className="text-xs text-gray-400 mb-1">{card.trigger}</div>
-          <div className="text-lg font-semibold text-white">${prices[card.trigger]?.toFixed(2) || '---'}</div>
-        </div>
-        <div className="flex-1 bg-gray-700/50 rounded-lg p-3">
-          <div className="text-xs text-gray-400 mb-1">{card.trigger}</div>
-          {quoteLoading ? (
+          {leaderLoading ? (
             <div className="animate-pulse">
               <div className="h-6 bg-gray-600 rounded w-20 mb-1"></div>
               <div className="h-4 bg-gray-600 rounded w-14"></div>
             </div>
-          ) : quoteError ? (
+          ) : leaderError ? (
             <div className="text-sm text-gray-500">Price unavailable</div>
-          ) : quoteData ? (
+          ) : leaderQuote ? (
             <div>
               <div className="text-lg font-semibold text-white">
-                ${quoteData.price?.toFixed(2)}
+                ${leaderQuote.price?.toFixed(2)}
               </div>
-              <div className={`text-sm font-medium ${quoteData.changePercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {quoteData.changePercent >= 0 ? '+' : ''}{quoteData.changePercent?.toFixed(2)}%
+              <div className={`text-sm font-medium ${leaderQuote.changePercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {leaderQuote.changePercent >= 0 ? '+' : ''}{leaderQuote.changePercent?.toFixed(2)}%
               </div>
             </div>
           ) : (
-            <div className="text-lg font-semibold text-white">${prices[card.trigger]?.toFixed(2) || '---'}</div>
+            <div className="text-lg font-semibold text-white">---</div>
+          )}
+        </div>
+        {/* Follower/Echo Stock */}
+        <div className="flex-1 bg-gray-700/50 rounded-lg p-3">
+          <div className="text-xs text-gray-400 mb-1">{card.echo}</div>
+          {followerLoading ? (
+            <div className="animate-pulse">
+              <div className="h-6 bg-gray-600 rounded w-20 mb-1"></div>
+              <div className="h-4 bg-gray-600 rounded w-14"></div>
+            </div>
+          ) : followerError ? (
+            <div className="text-sm text-gray-500">Price unavailable</div>
+          ) : followerQuote ? (
+            <div>
+              <div className="text-lg font-semibold text-white">
+                ${followerQuote.price?.toFixed(2)}
+              </div>
+              <div className={`text-sm font-medium ${followerQuote.changePercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {followerQuote.changePercent >= 0 ? '+' : ''}{followerQuote.changePercent?.toFixed(2)}%
+              </div>
+            </div>
+          ) : (
+            <div className="text-lg font-semibold text-white">---</div>
           )}
         </div>
       </div>
