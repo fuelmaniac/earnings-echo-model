@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useStockQuote } from './hooks/useStockQuote'
 import { useEarningsInfo } from './hooks/useEarningsInfo'
+import PATTERN_HISTORY from './data/pattern-history.json'
 
 // Signal card data with sector information
 const SIGNAL_CARDS = [
@@ -108,6 +109,24 @@ const SIGNAL_CARDS = [
 
 // Sectors for filtering
 const SECTORS = ['All', 'Technology', 'Finance', 'Automotive', 'Energy']
+
+// Create enriched cards with real pattern history data
+const enrichedCards = SIGNAL_CARDS.map(card => {
+  const pairId = `${card.trigger}_${card.echo}`
+  const pattern = PATTERN_HISTORY[pairId]
+
+  if (pattern && pattern.history && pattern.stats) {
+    return {
+      ...card,
+      quarterlyHistory: pattern.history,
+      correlation: pattern.stats.correlation || card.correlation,
+      historicalAccuracy: pattern.stats.accuracy || card.historicalAccuracy
+    }
+  }
+
+  // Fallback to mock data if pattern data not available
+  return card
+})
 
 // Alert Modal Component
 function AlertModal({ isOpen, onClose, card }) {
@@ -437,23 +456,42 @@ function SignalCard({ card, onSetAlert }) {
 
         {isHistoryOpen && (
           <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
-            {card.quarterlyHistory.map((item, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between p-2 bg-gray-700/20 rounded text-xs"
-              >
-                <span className="text-gray-400">{item.quarter}</span>
-                <span className={item.triggerResult === 'Beat' ? 'text-green-400' : 'text-red-400'}>
-                  {item.triggerResult}
-                </span>
-                <span className={item.echoMove.startsWith('+') ? 'text-green-400' : 'text-red-400'}>
-                  {item.echoMove}
-                </span>
-                <span className={item.accurate ? 'text-green-400' : 'text-red-400'}>
-                  {item.accurate ? '✓' : '✗'}
-                </span>
-              </div>
-            ))}
+            {card.quarterlyHistory.map((item, index) => {
+              // Handle both old format (echoMove string) and new format (echoMovePercent number)
+              const echoMoveDisplay = item.echoMove
+                ? item.echoMove
+                : item.echoMovePercent != null
+                  ? `${item.echoMovePercent >= 0 ? '+' : ''}${item.echoMovePercent.toFixed(1)}%`
+                  : 'N/A'
+              const isEchoPositive = item.echoMove
+                ? item.echoMove.startsWith('+')
+                : item.echoMovePercent != null
+                  ? item.echoMovePercent >= 0
+                  : null
+              const triggerResultColor = item.triggerResult === 'Beat'
+                ? 'text-green-400'
+                : item.triggerResult === 'Miss'
+                  ? 'text-red-400'
+                  : 'text-yellow-400'
+
+              return (
+                <div
+                  key={index}
+                  className="flex items-center justify-between p-2 bg-gray-700/20 rounded text-xs"
+                >
+                  <span className="text-gray-400">{item.quarter}</span>
+                  <span className={triggerResultColor}>
+                    {item.triggerResult}
+                  </span>
+                  <span className={isEchoPositive === null ? 'text-gray-400' : isEchoPositive ? 'text-green-400' : 'text-red-400'}>
+                    {echoMoveDisplay}
+                  </span>
+                  <span className={item.accurate ? 'text-green-400' : 'text-red-400'}>
+                    {item.accurate ? '✓' : '✗'}
+                  </span>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
@@ -510,7 +548,7 @@ function App() {
   const [alertModal, setAlertModal] = useState({ isOpen: false, card: null })
 
   // Filter cards by sector
-  const filteredCards = SIGNAL_CARDS.filter(
+  const filteredCards = enrichedCards.filter(
     card => selectedSector === 'All' || card.sector === selectedSector
   )
 
