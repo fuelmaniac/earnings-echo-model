@@ -35,6 +35,12 @@ const STOCK_PAIRS = [
 const TRIGGER_SURPRISE_THRESHOLD = 2.0; // 2%
 const ECHO_MOVE_THRESHOLD = 1.5; // 1.5%
 
+// Fundamental echo thresholds
+const BEAT_THRESHOLD = 2.0;  // surprisePercent > 2.0% = Beat
+const MISS_THRESHOLD = -2.0; // surprisePercent < -2.0% = Miss
+const MAX_GAP_DAYS_WARNING = 45; // Flag if earnings >45 days apart in same quarter
+const MIN_SAMPLE_SIZE = 4; // Minimum samples for stats calculation
+
 /**
  * Get API keys from environment
  */
@@ -188,7 +194,7 @@ function getTriggerResult(surprisePercent) {
 }
 
 /**
- * Determine quarter string from date
+ * Determine quarter string from date (display format: "Q3 2024")
  */
 function getQuarterFromDate(dateStr) {
   const date = new Date(dateStr);
@@ -202,6 +208,231 @@ function getQuarterFromDate(dateStr) {
   else quarter = 'Q4';
 
   return `${quarter} ${year}`;
+}
+
+/**
+ * Get year-quarter key for matching (format: "2024-Q3")
+ */
+function getYearQuarterKey(dateStr) {
+  const date = new Date(dateStr);
+  const month = date.getMonth() + 1;
+  const year = date.getFullYear();
+
+  let quarter;
+  if (month <= 3) quarter = 'Q1';
+  else if (month <= 6) quarter = 'Q2';
+  else if (month <= 9) quarter = 'Q3';
+  else quarter = 'Q4';
+
+  return `${year}-${quarter}`;
+}
+
+/**
+ * Determine earnings result based on surprise percentage
+ * Beat: > 2%, Miss: < -2%, Inline: -2% to 2%
+ */
+function getEarningsResult(surprisePercent) {
+  if (surprisePercent === null || surprisePercent === undefined) return null;
+  if (surprisePercent > BEAT_THRESHOLD) return 'Beat';
+  if (surprisePercent < MISS_THRESHOLD) return 'Miss';
+  return 'Inline';
+}
+
+/**
+ * Calculate days between two dates
+ */
+function getDaysBetween(date1Str, date2Str) {
+  const d1 = new Date(date1Str);
+  const d2 = new Date(date2Str);
+  const diffMs = Math.abs(d2 - d1);
+  return Math.round(diffMs / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Calculate surprise percent from earnings data
+ */
+function calculateSurprisePercent(earning) {
+  if (earning.surprisePercent !== undefined && earning.surprisePercent !== null) {
+    return earning.surprisePercent;
+  }
+
+  const actual = earning.actual;
+  const estimate = earning.estimate;
+
+  if (actual !== null && estimate !== null && estimate !== 0) {
+    return ((actual - estimate) / Math.abs(estimate)) * 100;
+  }
+
+  return null;
+}
+
+/**
+ * Match earnings from two companies by quarter
+ * Returns array of matched quarters with trigger/echo determined by date order
+ */
+function matchQuarterlyEarnings(symbolA, earningsA, symbolB, earningsB) {
+  // Build maps of earnings by year-quarter key
+  const mapA = new Map();
+  const mapB = new Map();
+
+  for (const earning of earningsA) {
+    const date = earning.period || earning.date;
+    if (!date) continue;
+    const key = getYearQuarterKey(date);
+    const surprisePercent = calculateSurprisePercent(earning);
+    mapA.set(key, { date, surprisePercent, symbol: symbolA });
+  }
+
+  for (const earning of earningsB) {
+    const date = earning.period || earning.date;
+    if (!date) continue;
+    const key = getYearQuarterKey(date);
+    const surprisePercent = calculateSurprisePercent(earning);
+    mapB.set(key, { date, surprisePercent, symbol: symbolB });
+  }
+
+  // Find matching quarters
+  const matchedQuarters = [];
+  const allKeys = new Set([...mapA.keys(), ...mapB.keys()]);
+  const sortedKeys = Array.from(allKeys).sort().reverse(); // Most recent first
+
+  for (const key of sortedKeys) {
+    const dataA = mapA.get(key);
+    const dataB = mapB.get(key);
+
+    // Skip if either company missing data for this quarter
+    if (!dataA || !dataB) continue;
+    if (dataA.surprisePercent === null || dataB.surprisePercent === null) continue;
+
+    // Determine which reports first (trigger) and second (echo)
+    let trigger, echo;
+    const dateA = new Date(dataA.date);
+    const dateB = new Date(dataB.date);
+
+    if (dateA < dateB) {
+      trigger = dataA;
+      echo = dataB;
+    } else if (dateB < dateA) {
+      trigger = dataB;
+      echo = dataA;
+    } else {
+      // Same day: use alphabetical order
+      if (symbolA < symbolB) {
+        trigger = dataA;
+        echo = dataB;
+      } else {
+        trigger = dataB;
+        echo = dataA;
+      }
+    }
+
+    const gapDays = getDaysBetween(trigger.date, echo.date);
+    const triggerResult = getEarningsResult(trigger.surprisePercent);
+    const echoResult = getEarningsResult(echo.surprisePercent);
+
+    // Determine agreement (same result direction)
+    const agreement = triggerResult === echoResult;
+
+    // Parse quarter for display (e.g., "2024-Q3" → "Q3 2024")
+    const [year, q] = key.split('-');
+    const quarterDisplay = `${q} ${year}`;
+
+    const matched = {
+      quarter: quarterDisplay,
+      triggerDate: trigger.date,
+      triggerSymbol: trigger.symbol,
+      echoDate: echo.date,
+      echoSymbol: echo.symbol,
+      gapDays,
+      triggerResult,
+      echoResult,
+      triggerSurprisePercent: Math.round(trigger.surprisePercent * 10) / 10,
+      echoSurprisePercent: Math.round(echo.surprisePercent * 10) / 10,
+      agreement
+    };
+
+    // Add warning if gap is too large
+    if (gapDays > MAX_GAP_DAYS_WARNING) {
+      matched.warning = `Gap of ${gapDays} days exceeds ${MAX_GAP_DAYS_WARNING} day threshold`;
+    }
+
+    matchedQuarters.push(matched);
+  }
+
+  return matchedQuarters;
+}
+
+/**
+ * Calculate fundamental echo statistics from matched quarters
+ */
+function calculateFundamentalEchoStats(matchedQuarters) {
+  if (matchedQuarters.length < MIN_SAMPLE_SIZE) {
+    return null;
+  }
+
+  // Count beat/miss patterns
+  let triggerBeats = 0;
+  let echoBeatsWhenTriggerBeats = 0;
+  let triggerMisses = 0;
+  let echoMissesWhenTriggerMisses = 0;
+  let agreements = 0;
+
+  const triggerSurprises = [];
+  const echoSurprises = [];
+  let totalGapDays = 0;
+
+  for (const q of matchedQuarters) {
+    // Collect for correlation
+    triggerSurprises.push(q.triggerSurprisePercent);
+    echoSurprises.push(q.echoSurprisePercent);
+    totalGapDays += q.gapDays;
+
+    // Track agreement
+    if (q.agreement) agreements++;
+
+    // Beat follows beat
+    if (q.triggerResult === 'Beat') {
+      triggerBeats++;
+      if (q.echoResult === 'Beat') {
+        echoBeatsWhenTriggerBeats++;
+      }
+    }
+
+    // Miss follows miss
+    if (q.triggerResult === 'Miss') {
+      triggerMisses++;
+      if (q.echoResult === 'Miss') {
+        echoMissesWhenTriggerMisses++;
+      }
+    }
+  }
+
+  // Calculate probabilities
+  const beatFollowsBeat = triggerBeats > 0
+    ? Math.round((echoBeatsWhenTriggerBeats / triggerBeats) * 100) / 100
+    : null;
+
+  const missFollowsMiss = triggerMisses > 0
+    ? Math.round((echoMissesWhenTriggerMisses / triggerMisses) * 100) / 100
+    : null;
+
+  const directionAgreement = Math.round((agreements / matchedQuarters.length) * 100) / 100;
+
+  // Calculate correlation between surprise percentages
+  const fundamentalCorrelation = calculateCorrelation(triggerSurprises, echoSurprises);
+
+  const avgGapDays = Math.round(totalGapDays / matchedQuarters.length);
+
+  return {
+    beatFollowsBeat,
+    missFollowsMiss,
+    directionAgreement,
+    fundamentalCorrelation: fundamentalCorrelation !== null
+      ? Math.round(fundamentalCorrelation * 100) / 100
+      : null,
+    avgGapDays,
+    sampleSize: matchedQuarters.length
+  };
 }
 
 /**
@@ -299,31 +530,85 @@ function calculateStats(history) {
 }
 
 /**
- * Process a single stock pair
+ * Process a single stock pair - calculates both price echo and fundamental echo
  */
 async function processStockPair(pair, finnhubKey, tiingoKey) {
   console.log(`\nProcessing ${pair.id} (${pair.trigger} → ${pair.echo})...`);
 
-  // Fetch earnings history for trigger stock (uses Finnhub)
-  const earnings = await fetchEarningsHistory(pair.trigger, finnhubKey);
+  // Fetch earnings history for BOTH stocks (uses Finnhub)
+  console.log(`  Fetching earnings for ${pair.trigger} and ${pair.echo}...`);
+  const triggerEarnings = await fetchEarningsHistory(pair.trigger, finnhubKey);
+  const echoEarnings = await fetchEarningsHistory(pair.echo, finnhubKey);
 
-  if (!earnings || earnings.length === 0) {
+  const emptyPriceEcho = {
+    history: [],
+    stats: {
+      correlation: null,
+      accuracy: 0,
+      avgEchoMove: 0,
+      sampleSize: 0
+    }
+  };
+
+  const emptyFundamentalEcho = {
+    matchedQuarters: [],
+    stats: null
+  };
+
+  if (!triggerEarnings || triggerEarnings.length === 0) {
     console.log(`  No earnings data found for ${pair.trigger}`);
     return {
-      history: [],
-      stats: {
-        correlation: null,
-        accuracy: 0,
-        avgEchoMove: 0,
-        sampleSize: 0
-      }
+      priceEcho: emptyPriceEcho,
+      fundamentalEcho: emptyFundamentalEcho
     };
   }
 
-  console.log(`  Found ${earnings.length} earnings records for ${pair.trigger}`);
+  console.log(`  Found ${triggerEarnings.length} earnings records for ${pair.trigger}`);
+  console.log(`  Found ${echoEarnings?.length || 0} earnings records for ${pair.echo}`);
+
+  // ========================================
+  // FUNDAMENTAL ECHO CALCULATION
+  // ========================================
+  console.log(`\n  --- Fundamental Echo Analysis ---`);
+  let fundamentalEcho = emptyFundamentalEcho;
+
+  if (echoEarnings && echoEarnings.length > 0) {
+    // Match quarters between both companies
+    const matchedQuarters = matchQuarterlyEarnings(
+      pair.trigger, triggerEarnings,
+      pair.echo, echoEarnings
+    );
+
+    console.log(`  Matched ${matchedQuarters.length} quarters between ${pair.trigger} and ${pair.echo}`);
+
+    for (const q of matchedQuarters) {
+      const warning = q.warning ? ` [WARNING: ${q.warning}]` : '';
+      console.log(`    ${q.quarter}: ${q.triggerSymbol} ${q.triggerResult} (${q.triggerSurprisePercent}%) → ${q.echoSymbol} ${q.echoResult} (${q.echoSurprisePercent}%), Gap: ${q.gapDays}d, Agreement: ${q.agreement}${warning}`);
+    }
+
+    const fundamentalStats = calculateFundamentalEchoStats(matchedQuarters);
+
+    if (fundamentalStats) {
+      console.log(`  Fundamental Stats: Beat→Beat=${fundamentalStats.beatFollowsBeat}, Miss→Miss=${fundamentalStats.missFollowsMiss}, Agreement=${fundamentalStats.directionAgreement}, Correlation=${fundamentalStats.fundamentalCorrelation}, Avg Gap=${fundamentalStats.avgGapDays}d`);
+    } else {
+      console.log(`  Fundamental Stats: Insufficient data (need >= ${MIN_SAMPLE_SIZE} samples)`);
+    }
+
+    fundamentalEcho = {
+      matchedQuarters,
+      stats: fundamentalStats
+    };
+  } else {
+    console.log(`  Skipping fundamental echo - no earnings data for ${pair.echo}`);
+  }
+
+  // ========================================
+  // PRICE ECHO CALCULATION (existing logic)
+  // ========================================
+  console.log(`\n  --- Price Echo Analysis ---`);
 
   // Extract all earnings dates and find date range
-  const earningsDates = earnings
+  const earningsDates = triggerEarnings
     .map(e => e.period || e.date)
     .filter(d => d)
     .sort();
@@ -331,8 +616,8 @@ async function processStockPair(pair, finnhubKey, tiingoKey) {
   if (earningsDates.length === 0) {
     console.log(`  No valid earnings dates found`);
     return {
-      history: [],
-      stats: { correlation: null, accuracy: 0, avgEchoMove: 0, sampleSize: 0 }
+      priceEcho: emptyPriceEcho,
+      fundamentalEcho
     };
   }
 
@@ -350,8 +635,8 @@ async function processStockPair(pair, finnhubKey, tiingoKey) {
   if (!priceData || priceData.length === 0) {
     console.log(`  No price data found for ${pair.echo}`);
     return {
-      history: [],
-      stats: { correlation: null, accuracy: 0, avgEchoMove: 0, sampleSize: 0 }
+      priceEcho: emptyPriceEcho,
+      fundamentalEcho
     };
   }
 
@@ -363,7 +648,7 @@ async function processStockPair(pair, finnhubKey, tiingoKey) {
 
   const history = [];
 
-  for (const earning of earnings) {
+  for (const earning of triggerEarnings) {
     // Finnhub earnings data structure
     const earningsDate = earning.period || earning.date;
     const actual = earning.actual;
@@ -406,9 +691,11 @@ async function processStockPair(pair, finnhubKey, tiingoKey) {
   // Calculate statistics
   const stats = calculateStats(history);
 
-  console.log(`  Stats: Correlation=${stats.correlation}, Accuracy=${stats.accuracy}%, Avg Echo Move=${stats.avgEchoMove}%, Sample Size=${stats.sampleSize}`);
+  console.log(`  Price Echo Stats: Correlation=${stats.correlation}, Accuracy=${stats.accuracy}%, Avg Echo Move=${stats.avgEchoMove}%, Sample Size=${stats.sampleSize}`);
 
-  return { history, stats };
+  const priceEcho = { history, stats };
+
+  return { priceEcho, fundamentalEcho };
 }
 
 /**
@@ -420,8 +707,8 @@ async function main() {
 
   const { finnhubKey, tiingoKey } = getApiKeys();
   console.log('API keys found. Starting analysis...');
-  console.log('  - Finnhub: For earnings data');
-  console.log('  - Tiingo: For historical prices');
+  console.log('  - Finnhub: For earnings data (both trigger and echo stocks)');
+  console.log('  - Tiingo: For historical prices (echo stock)');
 
   const results = {};
 
@@ -437,6 +724,25 @@ async function main() {
     console.log(`\n=================================`);
     console.log(`Results saved to: ${outputPath}`);
     console.log(`Total pairs analyzed: ${Object.keys(results).length}`);
+
+    // Print summary table
+    console.log(`\n=== SUMMARY ===`);
+    console.log(`\nPrice Echo (trigger earnings → echo stock price movement):`);
+    for (const [pairId, data] of Object.entries(results)) {
+      const stats = data.priceEcho?.stats || {};
+      console.log(`  ${pairId}: Correlation=${stats.correlation}, Accuracy=${stats.accuracy}%, Samples=${stats.sampleSize}`);
+    }
+
+    console.log(`\nFundamental Echo (trigger earnings → echo earnings):`);
+    for (const [pairId, data] of Object.entries(results)) {
+      const stats = data.fundamentalEcho?.stats;
+      if (stats) {
+        console.log(`  ${pairId}: Beat→Beat=${stats.beatFollowsBeat}, Miss→Miss=${stats.missFollowsMiss}, Agreement=${stats.directionAgreement}, Correlation=${stats.fundamentalCorrelation}, AvgGap=${stats.avgGapDays}d, Samples=${stats.sampleSize}`);
+      } else {
+        const count = data.fundamentalEcho?.matchedQuarters?.length || 0;
+        console.log(`  ${pairId}: Insufficient data (${count} matched quarters, need >= ${MIN_SAMPLE_SIZE})`);
+      }
+    }
   } catch (error) {
     console.error('Error writing output file:', error.message);
     process.exit(1);
