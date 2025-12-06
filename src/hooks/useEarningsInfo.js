@@ -23,21 +23,7 @@ export function useEarningsInfo(symbol) {
       }
 
       const result = await response.json();
-
-      setData({
-        mode: result.mode,
-        symbol: result.symbol,
-        date: result.date,
-        hour: result.hour,
-        epsActual: result.epsActual,
-        epsEstimate: result.epsEstimate,
-        surprise: result.surprise,
-        surprisePercent: result.surprisePercent,
-        year: result.year,
-        quarter: result.quarter,
-        revenueActual: result.revenueActual,
-        revenueEstimate: result.revenueEstimate,
-      });
+      setData(result);
     } catch (err) {
       setError(err.message || 'An error occurred while fetching earnings info');
       setData(null);
