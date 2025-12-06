@@ -6,7 +6,7 @@
         "date": "2025-09-30",
         "triggerResult": "Beat",
         "triggerSurprisePercent": 2.1,
-        "echoMovePercent": null,
+        "echoMovePercent": 0.4,
         "accurate": false
       },
       {
@@ -14,15 +14,15 @@
         "date": "2025-06-30",
         "triggerResult": "Miss",
         "triggerSurprisePercent": -3.2,
-        "echoMovePercent": null,
-        "accurate": false
+        "echoMovePercent": -3,
+        "accurate": true
       },
       {
         "quarter": "Q1 2025",
         "date": "2025-03-31",
         "triggerResult": "Inline",
         "triggerSurprisePercent": 0.8,
-        "echoMovePercent": null,
+        "echoMovePercent": 1.6,
         "accurate": false
       },
       {
@@ -30,15 +30,15 @@
         "date": "2024-12-31",
         "triggerResult": "Inline",
         "triggerSurprisePercent": 0.1,
-        "echoMovePercent": null,
+        "echoMovePercent": 3,
         "accurate": false
       }
     ],
     "stats": {
-      "correlation": null,
-      "accuracy": 0,
-      "avgEchoMove": 0,
-      "sampleSize": 0
+      "correlation": 0.7,
+      "accuracy": 25,
+      "avgEchoMove": 2,
+      "sampleSize": 4
     }
   },
   "JPM_BAC": {
@@ -48,7 +48,7 @@
         "date": "2025-09-30",
         "triggerResult": "Beat",
         "triggerSurprisePercent": 3.8,
-        "echoMovePercent": null,
+        "echoMovePercent": -1.8,
         "accurate": false
       },
       {
@@ -56,15 +56,15 @@
         "date": "2025-06-30",
         "triggerResult": "Beat",
         "triggerSurprisePercent": 9.6,
-        "echoMovePercent": null,
-        "accurate": false
+        "echoMovePercent": 1.8,
+        "accurate": true
       },
       {
         "quarter": "Q1 2025",
         "date": "2025-03-31",
         "triggerResult": "Beat",
         "triggerSurprisePercent": 5.4,
-        "echoMovePercent": null,
+        "echoMovePercent": -0.6,
         "accurate": false
       },
       {
@@ -72,15 +72,15 @@
         "date": "2024-12-31",
         "triggerResult": "Beat",
         "triggerSurprisePercent": 15.9,
-        "echoMovePercent": null,
+        "echoMovePercent": 0.8,
         "accurate": false
       }
     ],
     "stats": {
-      "correlation": null,
-      "accuracy": 0,
-      "avgEchoMove": 0,
-      "sampleSize": 0
+      "correlation": 0.71,
+      "accuracy": 25,
+      "avgEchoMove": 1.3,
+      "sampleSize": 4
     }
   },
   "TSLA_F": {
@@ -90,7 +90,7 @@
         "date": "2025-09-30",
         "triggerResult": "Miss",
         "triggerSurprisePercent": -10.5,
-        "echoMovePercent": null,
+        "echoMovePercent": 2.6,
         "accurate": false
       },
       {
@@ -98,7 +98,7 @@
         "date": "2025-06-30",
         "triggerResult": "Miss",
         "triggerSurprisePercent": -8.5,
-        "echoMovePercent": null,
+        "echoMovePercent": 4.6,
         "accurate": false
       },
       {
@@ -106,7 +106,7 @@
         "date": "2025-03-31",
         "triggerResult": "Miss",
         "triggerSurprisePercent": -32.3,
-        "echoMovePercent": null,
+        "echoMovePercent": -0.9,
         "accurate": false
       },
       {
@@ -114,15 +114,15 @@
         "date": "2024-12-31",
         "triggerResult": "Miss",
         "triggerSurprisePercent": -6.1,
-        "echoMovePercent": null,
-        "accurate": false
+        "echoMovePercent": -2.5,
+        "accurate": true
       }
     ],
     "stats": {
-      "correlation": null,
-      "accuracy": 0,
-      "avgEchoMove": 0,
-      "sampleSize": 0
+      "correlation": 0.28,
+      "accuracy": 25,
+      "avgEchoMove": 2.7,
+      "sampleSize": 4
     }
   },
   "AAPL_MSFT": {
@@ -132,7 +132,7 @@
         "date": "2025-09-30",
         "triggerResult": "Beat",
         "triggerSurprisePercent": 2.4,
-        "echoMovePercent": null,
+        "echoMovePercent": 0.3,
         "accurate": false
       },
       {
@@ -140,7 +140,7 @@
         "date": "2025-06-30",
         "triggerResult": "Beat",
         "triggerSurprisePercent": 7.3,
-        "echoMovePercent": null,
+        "echoMovePercent": -1.1,
         "accurate": false
       },
       {
@@ -148,7 +148,7 @@
         "date": "2025-03-31",
         "triggerResult": "Inline",
         "triggerSurprisePercent": -0.6,
-        "echoMovePercent": null,
+        "echoMovePercent": 1.8,
         "accurate": false
       },
       {
@@ -156,15 +156,15 @@
         "date": "2024-12-31",
         "triggerResult": "Inline",
         "triggerSurprisePercent": 0.2,
-        "echoMovePercent": null,
+        "echoMovePercent": -0.7,
         "accurate": false
       }
     ],
     "stats": {
-      "correlation": null,
+      "correlation": -0.67,
       "accuracy": 0,
-      "avgEchoMove": 0,
-      "sampleSize": 0
+      "avgEchoMove": 1,
+      "sampleSize": 4
     }
   },
   "XOM_CVX": {
@@ -174,7 +174,7 @@
         "date": "2025-09-30",
         "triggerResult": "Beat",
         "triggerSurprisePercent": 2.4,
-        "echoMovePercent": null,
+        "echoMovePercent": -0.5,
         "accurate": false
       },
       {
@@ -182,15 +182,15 @@
         "date": "2025-06-30",
         "triggerResult": "Beat",
         "triggerSurprisePercent": 5.1,
-        "echoMovePercent": null,
-        "accurate": false
+        "echoMovePercent": 1.7,
+        "accurate": true
       },
       {
         "quarter": "Q1 2025",
         "date": "2025-03-31",
         "triggerResult": "Inline",
         "triggerSurprisePercent": 0.8,
-        "echoMovePercent": null,
+        "echoMovePercent": 0.7,
         "accurate": false
       },
       {
@@ -198,15 +198,15 @@
         "date": "2024-12-31",
         "triggerResult": "Beat",
         "triggerSurprisePercent": 5.8,
-        "echoMovePercent": null,
+        "echoMovePercent": 1.3,
         "accurate": false
       }
     ],
     "stats": {
-      "correlation": null,
-      "accuracy": 0,
-      "avgEchoMove": 0,
-      "sampleSize": 0
+      "correlation": 0.64,
+      "accuracy": 25,
+      "avgEchoMove": 1.1,
+      "sampleSize": 4
     }
   }
 }
