@@ -6,8 +6,17 @@
  * This script fetches historical earnings data and calculates pattern accuracy
  * for stock pairs (trigger → echo relationships).
  *
- * Uses:
- * - Finnhub API: For earnings data (/stock/earnings)
+ * Uses a HYBRID APPROACH for Finnhub earnings data:
+ * - /calendar/earnings: For actual announcement dates (reportDate)
+ * - /stock/earnings: For EPS surprise data (surprisePercent)
+ *
+ * The hybrid approach is necessary because:
+ * - /stock/earnings only provides fiscal period end dates (e.g., "2024-09-30")
+ * - /calendar/earnings provides actual announcement dates (e.g., "2024-10-29")
+ * - Without actual dates, gapDays between companies would always be 0
+ *
+ * APIs Used:
+ * - Finnhub API: For earnings data (calendar + surprises endpoints)
  * - Tiingo API: For historical daily close prices
  *
  * Usage: FINNHUB_API_KEY=your_key TIINGO_API_KEY=your_key node scripts/calculate-pattern-history.js
@@ -66,9 +75,10 @@ function getApiKeys() {
 }
 
 /**
- * Fetch earnings history for a stock (uses Finnhub)
+ * Fetch earnings surprises for a stock (uses Finnhub /stock/earnings)
+ * Returns fiscal period end dates and EPS surprise data
  */
-async function fetchEarningsHistory(symbol, finnhubKey) {
+async function fetchEarningsSurprises(symbol, finnhubKey) {
   const url = `${FINNHUB_BASE_URL}/stock/earnings`;
 
   try {
@@ -82,9 +92,199 @@ async function fetchEarningsHistory(symbol, finnhubKey) {
 
     return response.data || [];
   } catch (error) {
-    console.error(`Error fetching earnings for ${symbol}:`, error.message);
+    console.error(`Error fetching earnings surprises for ${symbol}:`, error.message);
     return [];
   }
+}
+
+/**
+ * Fetch earnings calendar for a stock (uses Finnhub /calendar/earnings)
+ * Returns actual announcement dates (reportDate)
+ */
+async function fetchEarningsCalendar(symbol, fromDate, toDate, finnhubKey) {
+  const url = `${FINNHUB_BASE_URL}/calendar/earnings`;
+
+  try {
+    const response = await axios.get(url, {
+      params: {
+        symbol,
+        from: fromDate,
+        to: toDate,
+        token: finnhubKey
+      }
+    });
+
+    // Response format: { earningsCalendar: [ {date, epsActual, epsEstimate, hour, ...} ] }
+    return response.data?.earningsCalendar || [];
+  } catch (error) {
+    console.error(`Error fetching earnings calendar for ${symbol}:`, error.message);
+    return [];
+  }
+}
+
+/**
+ * Merge earnings calendar (announcement dates) with earnings surprises (EPS data)
+ * Returns unified earnings data with actual announcement dates
+ */
+function mergeEarningsData(calendarData, surpriseData) {
+  // Build a map of quarter → surprise data (from /stock/earnings)
+  const surpriseByQuarter = new Map();
+  for (const item of surpriseData) {
+    const period = item.period;
+    if (!period) continue;
+    const key = getYearQuarterKey(period);
+    // Store the best data for this quarter (in case of duplicates)
+    if (!surpriseByQuarter.has(key) || item.surprisePercent !== null) {
+      surpriseByQuarter.set(key, {
+        period,
+        actual: item.actual,
+        estimate: item.estimate,
+        surprisePercent: item.surprisePercent,
+        surprise: item.surprise
+      });
+    }
+  }
+
+  // Build a map of quarter → calendar data (from /calendar/earnings)
+  const calendarByQuarter = new Map();
+  for (const item of calendarData) {
+    const reportDate = item.date;
+    if (!reportDate) continue;
+
+    // Calendar dates are actual announcement dates
+    // We need to determine the fiscal quarter being reported
+    // Typically, companies report Q3 results in Oct/Nov (4-6 weeks after quarter end)
+    // So we look at the previous quarter from the announcement date
+    const reportMonth = new Date(reportDate).getMonth() + 1;
+    const reportYear = new Date(reportDate).getFullYear();
+
+    // Infer fiscal quarter from announcement date
+    // Jan-Mar announcements → Q4 of prior year
+    // Apr-May announcements → Q1
+    // Jul-Aug announcements → Q2
+    // Oct-Nov announcements → Q3
+    let fiscalQuarter, fiscalYear;
+    if (reportMonth >= 1 && reportMonth <= 3) {
+      fiscalQuarter = 'Q4';
+      fiscalYear = reportYear - 1;
+    } else if (reportMonth >= 4 && reportMonth <= 6) {
+      fiscalQuarter = 'Q1';
+      fiscalYear = reportYear;
+    } else if (reportMonth >= 7 && reportMonth <= 9) {
+      fiscalQuarter = 'Q2';
+      fiscalYear = reportYear;
+    } else {
+      fiscalQuarter = 'Q3';
+      fiscalYear = reportYear;
+    }
+
+    const key = `${fiscalYear}-${fiscalQuarter}`;
+
+    // Store calendar data with actual announcement date
+    if (!calendarByQuarter.has(key)) {
+      calendarByQuarter.set(key, {
+        reportDate,
+        hour: item.hour, // 'bmo' (before market open) or 'amc' (after market close)
+        epsActual: item.epsActual,
+        epsEstimate: item.epsEstimate
+      });
+    }
+  }
+
+  // Merge: Start with calendar data (for announcement dates) and add surprise data
+  const merged = [];
+
+  // First, match calendar entries with surprise data
+  for (const [key, calendar] of calendarByQuarter) {
+    const surprise = surpriseByQuarter.get(key);
+
+    if (surprise) {
+      // We have both calendar and surprise data - use announcement date from calendar
+      merged.push({
+        date: calendar.reportDate,           // Actual announcement date from calendar
+        period: surprise.period,             // Fiscal period end date
+        actual: surprise.actual ?? calendar.epsActual,
+        estimate: surprise.estimate ?? calendar.epsEstimate,
+        surprisePercent: surprise.surprisePercent,
+        surprise: surprise.surprise,
+        hour: calendar.hour,
+        source: 'merged'
+      });
+    } else {
+      // Calendar only - calculate surprise from calendar data if possible
+      let surprisePercent = null;
+      if (calendar.epsActual !== null && calendar.epsEstimate !== null && calendar.epsEstimate !== 0) {
+        surprisePercent = ((calendar.epsActual - calendar.epsEstimate) / Math.abs(calendar.epsEstimate)) * 100;
+      }
+
+      merged.push({
+        date: calendar.reportDate,
+        period: null,
+        actual: calendar.epsActual,
+        estimate: calendar.epsEstimate,
+        surprisePercent,
+        surprise: null,
+        hour: calendar.hour,
+        source: 'calendar'
+      });
+    }
+  }
+
+  // Add any surprise-only entries (quarters not in calendar)
+  for (const [key, surprise] of surpriseByQuarter) {
+    if (!calendarByQuarter.has(key)) {
+      // Fallback: use fiscal period end date as announcement date (old behavior)
+      merged.push({
+        date: surprise.period,               // Fiscal period (fallback)
+        period: surprise.period,
+        actual: surprise.actual,
+        estimate: surprise.estimate,
+        surprisePercent: surprise.surprisePercent,
+        surprise: surprise.surprise,
+        hour: null,
+        source: 'surprise'
+      });
+    }
+  }
+
+  // Sort by date descending (most recent first)
+  merged.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  return merged;
+}
+
+/**
+ * Fetch complete earnings data for a stock using hybrid approach
+ * Combines calendar (announcement dates) with surprises (EPS data)
+ */
+async function fetchEarningsHistory(symbol, finnhubKey) {
+  // Calculate date range: 2 years back to end of current year
+  const now = new Date();
+  const fromDate = `${now.getFullYear() - 2}-01-01`;
+  const toDate = `${now.getFullYear()}-12-31`;
+
+  console.log(`    Fetching ${symbol} calendar from ${fromDate} to ${toDate}...`);
+
+  // Fetch both endpoints
+  const [calendarData, surpriseData] = await Promise.all([
+    fetchEarningsCalendar(symbol, fromDate, toDate, finnhubKey),
+    fetchEarningsSurprises(symbol, finnhubKey)
+  ]);
+
+  console.log(`    ${symbol}: ${calendarData.length} calendar entries, ${surpriseData.length} surprise entries`);
+
+  // Merge the data
+  const merged = mergeEarningsData(calendarData, surpriseData);
+
+  console.log(`    ${symbol}: ${merged.length} merged entries`);
+
+  // Log sample data for debugging
+  if (merged.length > 0) {
+    const sample = merged[0];
+    console.log(`    Sample: date=${sample.date}, period=${sample.period}, surprise=${sample.surprisePercent?.toFixed(1)}%, source=${sample.source}`);
+  }
+
+  return merged;
 }
 
 /**
@@ -269,6 +469,10 @@ function calculateSurprisePercent(earning) {
 /**
  * Match earnings from two companies by quarter
  * Returns array of matched quarters with trigger/echo determined by date order
+ *
+ * Uses hybrid data structure with:
+ * - date: actual announcement date (from /calendar/earnings)
+ * - period: fiscal period end date (from /stock/earnings)
  */
 function matchQuarterlyEarnings(symbolA, earningsA, symbolB, earningsB) {
   // Build maps of earnings by year-quarter key
@@ -276,19 +480,67 @@ function matchQuarterlyEarnings(symbolA, earningsA, symbolB, earningsB) {
   const mapB = new Map();
 
   for (const earning of earningsA) {
-    const date = earning.period || earning.date;
-    if (!date) continue;
-    const key = getYearQuarterKey(date);
+    // Use period for quarter matching (fiscal quarter)
+    // Use date for announcement date (actual reporting date)
+    const fiscalPeriod = earning.period;
+    const announcementDate = earning.date;
+
+    // Derive quarter key from fiscal period if available, else from announcement date
+    let key;
+    if (fiscalPeriod) {
+      key = getYearQuarterKey(fiscalPeriod);
+    } else if (announcementDate) {
+      // Fallback: infer fiscal quarter from announcement date
+      const reportMonth = new Date(announcementDate).getMonth() + 1;
+      const reportYear = new Date(announcementDate).getFullYear();
+      let fq, fy;
+      if (reportMonth >= 1 && reportMonth <= 3) { fq = 'Q4'; fy = reportYear - 1; }
+      else if (reportMonth >= 4 && reportMonth <= 6) { fq = 'Q1'; fy = reportYear; }
+      else if (reportMonth >= 7 && reportMonth <= 9) { fq = 'Q2'; fy = reportYear; }
+      else { fq = 'Q3'; fy = reportYear; }
+      key = `${fy}-${fq}`;
+    } else {
+      continue;
+    }
+
     const surprisePercent = calculateSurprisePercent(earning);
-    mapA.set(key, { date, surprisePercent, symbol: symbolA });
+    mapA.set(key, {
+      date: announcementDate || fiscalPeriod,  // Prefer announcement date
+      period: fiscalPeriod,
+      surprisePercent,
+      symbol: symbolA,
+      source: earning.source
+    });
   }
 
   for (const earning of earningsB) {
-    const date = earning.period || earning.date;
-    if (!date) continue;
-    const key = getYearQuarterKey(date);
+    const fiscalPeriod = earning.period;
+    const announcementDate = earning.date;
+
+    let key;
+    if (fiscalPeriod) {
+      key = getYearQuarterKey(fiscalPeriod);
+    } else if (announcementDate) {
+      const reportMonth = new Date(announcementDate).getMonth() + 1;
+      const reportYear = new Date(announcementDate).getFullYear();
+      let fq, fy;
+      if (reportMonth >= 1 && reportMonth <= 3) { fq = 'Q4'; fy = reportYear - 1; }
+      else if (reportMonth >= 4 && reportMonth <= 6) { fq = 'Q1'; fy = reportYear; }
+      else if (reportMonth >= 7 && reportMonth <= 9) { fq = 'Q2'; fy = reportYear; }
+      else { fq = 'Q3'; fy = reportYear; }
+      key = `${fy}-${fq}`;
+    } else {
+      continue;
+    }
+
     const surprisePercent = calculateSurprisePercent(earning);
-    mapB.set(key, { date, surprisePercent, symbol: symbolB });
+    mapB.set(key, {
+      date: announcementDate || fiscalPeriod,
+      period: fiscalPeriod,
+      surprisePercent,
+      symbol: symbolB,
+      source: earning.source
+    });
   }
 
   // Find matching quarters
@@ -707,7 +959,8 @@ async function main() {
 
   const { finnhubKey, tiingoKey } = getApiKeys();
   console.log('API keys found. Starting analysis...');
-  console.log('  - Finnhub: For earnings data (both trigger and echo stocks)');
+  console.log('  - Finnhub /calendar/earnings: For actual announcement dates');
+  console.log('  - Finnhub /stock/earnings: For EPS surprise data');
   console.log('  - Tiingo: For historical prices (echo stock)');
 
   const results = {};

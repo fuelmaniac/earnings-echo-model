@@ -8,8 +8,17 @@ This script calculates historical pattern accuracy for stock pairs (trigger → 
 
 ### APIs Used
 
-- **Finnhub**: For earnings data (`/stock/earnings` endpoint) - fetches data for both trigger and echo stocks
+The script uses a **hybrid approach** with two Finnhub endpoints to get complete earnings data:
+
+- **Finnhub `/calendar/earnings`**: For actual announcement dates (when the company released earnings)
+- **Finnhub `/stock/earnings`**: For EPS surprise data (actual vs. estimate)
 - **Tiingo**: For historical daily close prices (EOD endpoint) - fetches data for echo stocks
+
+#### Why Two Finnhub Endpoints?
+
+The `/stock/earnings` endpoint only provides **fiscal period end dates** (e.g., "2024-09-30" for Q3), not the actual announcement dates. This caused a critical bug where `gapDays` between companies was always 0.
+
+The `/calendar/earnings` endpoint provides actual **announcement dates** (e.g., "2024-10-29" when AMD reported Q3), enabling accurate gap calculations between company earnings (typically 20-30 days for sector peers).
 
 ### What it does
 
@@ -189,6 +198,10 @@ The script generates `src/data/pattern-history.json` with the following structur
 - `matchedQuarters[].echoSurprisePercent`: Second reporter's surprise %
 - `matchedQuarters[].agreement`: Whether both had same result
 - `matchedQuarters[].warning`: (optional) Warning if gap >45 days
+- `matchedQuarters[].source`: Data source indicator:
+  - `merged`: Both calendar and surprise data matched
+  - `calendar`: Only calendar data available (announcement date)
+  - `surprise`: Only surprise data available (fallback to fiscal period)
 - `stats.beatFollowsBeat`: P(echo beats | trigger beats)
 - `stats.missFollowsMiss`: P(echo misses | trigger misses)
 - `stats.directionAgreement`: % with same result direction
@@ -202,8 +215,12 @@ The script generates `src/data/pattern-history.json` with the following structur
 - **Tiingo**: Free tier allows 50 requests/hour, but only 1 call per echo symbol is needed
 
 The script makes minimal API calls:
-- 10 calls to Finnhub (one per trigger stock + one per echo stock for earnings)
+- 20 calls to Finnhub:
+  - 10 calls to `/calendar/earnings` (one per stock for announcement dates)
+  - 10 calls to `/stock/earnings` (one per stock for surprise data)
 - 5 calls to Tiingo (one per echo stock for full price history)
+
+The calendar and surprise calls for each stock are made in parallel for efficiency.
 
 ### Troubleshooting
 
@@ -212,3 +229,5 @@ The script makes minimal API calls:
 - **No earnings data returned** - The Finnhub free tier has limited requests; wait and try again
 - **No price data for earnings date** - The earnings date may fall on a weekend/holiday; the script will log a warning
 - **echoMovePercent is null** - Missing price data for either D or D+1; check the warning messages
+- **gapDays is 0 for all quarters** - Calendar data may not be matching surprise data; check the `source` field in output
+- **source="surprise" for all entries** - Calendar endpoint may not have data for older quarters; this is expected for historical data
