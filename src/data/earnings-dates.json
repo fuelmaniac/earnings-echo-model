@@ -1,0 +1,34 @@
+{
+  "AMD": [
+    {"date": "2024-10-29", "quarter": 3, "year": 2024},
+    {"date": "2024-07-30", "quarter": 2, "year": 2024},
+    {"date": "2024-04-30", "quarter": 1, "year": 2024},
+    {"date": "2024-01-30", "quarter": 4, "year": 2023},
+    {"date": "2023-10-31", "quarter": 3, "year": 2023},
+    {"date": "2023-08-01", "quarter": 2, "year": 2023},
+    {"date": "2023-05-02", "quarter": 1, "year": 2023},
+    {"date": "2023-01-31", "quarter": 4, "year": 2022}
+  ],
+  "NVDA": [
+    {"date": "2024-11-20", "quarter": 3, "year": 2024},
+    {"date": "2024-08-28", "quarter": 2, "year": 2024},
+    {"date": "2024-05-22", "quarter": 1, "year": 2024},
+    {"date": "2024-02-21", "quarter": 4, "year": 2023},
+    {"date": "2023-11-21", "quarter": 3, "year": 2023},
+    {"date": "2023-08-23", "quarter": 2, "year": 2023},
+    {"date": "2023-05-24", "quarter": 1, "year": 2023},
+    {"date": "2023-02-22", "quarter": 4, "year": 2022}
+  ],
+  "JPM": [
+    {"date": "2024-10-11", "quarter": 3, "year": 2024},
+    {"date": "2024-07-12", "quarter": 2, "year": 2024},
+    {"date": "2024-04-12", "quarter": 1, "year": 2024},
+    {"date": "2024-01-12", "quarter": 4, "year": 2023}
+  ],
+  "BAC": [
+    {"date": "2024-10-15", "quarter": 3, "year": 2024},
+    {"date": "2024-07-16", "quarter": 2, "year": 2024},
+    {"date": "2024-04-16", "quarter": 1, "year": 2024},
+    {"date": "2024-01-12", "quarter": 4, "year": 2023}
+  ]
+}

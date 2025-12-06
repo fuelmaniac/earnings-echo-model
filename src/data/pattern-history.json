@@ -1,212 +1,204 @@
 {
   "AMD_NVDA": {
-    "history": [
-      {
-        "quarter": "Q3 2025",
-        "date": "2025-09-30",
-        "triggerResult": "Beat",
-        "triggerSurprisePercent": 2.1,
-        "echoMovePercent": 0.4,
-        "accurate": false
-      },
-      {
-        "quarter": "Q2 2025",
-        "date": "2025-06-30",
-        "triggerResult": "Miss",
-        "triggerSurprisePercent": -3.2,
-        "echoMovePercent": -3,
-        "accurate": true
-      },
-      {
-        "quarter": "Q1 2025",
-        "date": "2025-03-31",
-        "triggerResult": "Inline",
-        "triggerSurprisePercent": 0.8,
-        "echoMovePercent": 1.6,
-        "accurate": false
-      },
-      {
-        "quarter": "Q4 2024",
-        "date": "2024-12-31",
-        "triggerResult": "Inline",
-        "triggerSurprisePercent": 0.1,
-        "echoMovePercent": 3,
-        "accurate": false
+    "priceEcho": {
+      "history": [],
+      "stats": {
+        "correlation": null,
+        "accuracy": 0,
+        "avgEchoMove": 0,
+        "sampleSize": 0
       }
-    ],
-    "stats": {
-      "correlation": 0.7,
-      "accuracy": 25,
-      "avgEchoMove": 2,
-      "sampleSize": 4
+    },
+    "fundamentalEcho": {
+      "matchedQuarters": [
+        {
+          "quarter": "Q4 2024",
+          "triggerDate": "2024-10-29",
+          "triggerSymbol": "AMD",
+          "echoDate": "2024-11-20",
+          "echoSymbol": "NVDA",
+          "gapDays": 22,
+          "triggerResult": null,
+          "echoResult": null,
+          "triggerSurprisePercent": 0,
+          "echoSurprisePercent": 0,
+          "agreement": null
+        },
+        {
+          "quarter": "Q3 2024",
+          "triggerDate": "2024-07-30",
+          "triggerSymbol": "AMD",
+          "echoDate": "2024-08-28",
+          "echoSymbol": "NVDA",
+          "gapDays": 29,
+          "triggerResult": null,
+          "echoResult": null,
+          "triggerSurprisePercent": 0,
+          "echoSurprisePercent": 0,
+          "agreement": null
+        },
+        {
+          "quarter": "Q2 2024",
+          "triggerDate": "2024-04-30",
+          "triggerSymbol": "AMD",
+          "echoDate": "2024-05-22",
+          "echoSymbol": "NVDA",
+          "gapDays": 22,
+          "triggerResult": null,
+          "echoResult": null,
+          "triggerSurprisePercent": 0,
+          "echoSurprisePercent": 0,
+          "agreement": null
+        },
+        {
+          "quarter": "Q1 2024",
+          "triggerDate": "2024-01-30",
+          "triggerSymbol": "AMD",
+          "echoDate": "2024-02-21",
+          "echoSymbol": "NVDA",
+          "gapDays": 22,
+          "triggerResult": null,
+          "echoResult": null,
+          "triggerSurprisePercent": 0,
+          "echoSurprisePercent": 0,
+          "agreement": null
+        },
+        {
+          "quarter": "Q4 2023",
+          "triggerDate": "2023-10-31",
+          "triggerSymbol": "AMD",
+          "echoDate": "2023-11-21",
+          "echoSymbol": "NVDA",
+          "gapDays": 21,
+          "triggerResult": null,
+          "echoResult": null,
+          "triggerSurprisePercent": 0,
+          "echoSurprisePercent": 0,
+          "agreement": null
+        },
+        {
+          "quarter": "Q3 2023",
+          "triggerDate": "2023-08-01",
+          "triggerSymbol": "AMD",
+          "echoDate": "2023-08-23",
+          "echoSymbol": "NVDA",
+          "gapDays": 22,
+          "triggerResult": null,
+          "echoResult": null,
+          "triggerSurprisePercent": 0,
+          "echoSurprisePercent": 0,
+          "agreement": null
+        },
+        {
+          "quarter": "Q2 2023",
+          "triggerDate": "2023-05-02",
+          "triggerSymbol": "AMD",
+          "echoDate": "2023-05-24",
+          "echoSymbol": "NVDA",
+          "gapDays": 22,
+          "triggerResult": null,
+          "echoResult": null,
+          "triggerSurprisePercent": 0,
+          "echoSurprisePercent": 0,
+          "agreement": null
+        },
+        {
+          "quarter": "Q1 2023",
+          "triggerDate": "2023-01-31",
+          "triggerSymbol": "AMD",
+          "echoDate": "2023-02-22",
+          "echoSymbol": "NVDA",
+          "gapDays": 22,
+          "triggerResult": null,
+          "echoResult": null,
+          "triggerSurprisePercent": 0,
+          "echoSurprisePercent": 0,
+          "agreement": null
+        }
+      ],
+      "stats": {
+        "beatFollowsBeat": null,
+        "missFollowsMiss": null,
+        "directionAgreement": null,
+        "fundamentalCorrelation": 0,
+        "avgGapDays": 23,
+        "sampleSize": 8
+      }
     }
   },
   "JPM_BAC": {
-    "history": [
-      {
-        "quarter": "Q3 2025",
-        "date": "2025-09-30",
-        "triggerResult": "Beat",
-        "triggerSurprisePercent": 3.8,
-        "echoMovePercent": -1.8,
-        "accurate": false
-      },
-      {
-        "quarter": "Q2 2025",
-        "date": "2025-06-30",
-        "triggerResult": "Beat",
-        "triggerSurprisePercent": 9.6,
-        "echoMovePercent": 1.8,
-        "accurate": true
-      },
-      {
-        "quarter": "Q1 2025",
-        "date": "2025-03-31",
-        "triggerResult": "Beat",
-        "triggerSurprisePercent": 5.4,
-        "echoMovePercent": -0.6,
-        "accurate": false
-      },
-      {
-        "quarter": "Q4 2024",
-        "date": "2024-12-31",
-        "triggerResult": "Beat",
-        "triggerSurprisePercent": 15.9,
-        "echoMovePercent": 0.8,
-        "accurate": false
+    "priceEcho": {
+      "history": [],
+      "stats": {
+        "correlation": null,
+        "accuracy": 0,
+        "avgEchoMove": 0,
+        "sampleSize": 0
       }
-    ],
-    "stats": {
-      "correlation": 0.71,
-      "accuracy": 25,
-      "avgEchoMove": 1.3,
-      "sampleSize": 4
-    }
-  },
-  "TSLA_F": {
-    "history": [
-      {
-        "quarter": "Q3 2025",
-        "date": "2025-09-30",
-        "triggerResult": "Miss",
-        "triggerSurprisePercent": -10.5,
-        "echoMovePercent": 2.6,
-        "accurate": false
-      },
-      {
-        "quarter": "Q2 2025",
-        "date": "2025-06-30",
-        "triggerResult": "Miss",
-        "triggerSurprisePercent": -8.5,
-        "echoMovePercent": 4.6,
-        "accurate": false
-      },
-      {
-        "quarter": "Q1 2025",
-        "date": "2025-03-31",
-        "triggerResult": "Miss",
-        "triggerSurprisePercent": -32.3,
-        "echoMovePercent": -0.9,
-        "accurate": false
-      },
-      {
-        "quarter": "Q4 2024",
-        "date": "2024-12-31",
-        "triggerResult": "Miss",
-        "triggerSurprisePercent": -6.1,
-        "echoMovePercent": -2.5,
-        "accurate": true
+    },
+    "fundamentalEcho": {
+      "matchedQuarters": [
+        {
+          "quarter": "Q4 2024",
+          "triggerDate": "2024-10-11",
+          "triggerSymbol": "JPM",
+          "echoDate": "2024-10-15",
+          "echoSymbol": "BAC",
+          "gapDays": 4,
+          "triggerResult": null,
+          "echoResult": null,
+          "triggerSurprisePercent": 0,
+          "echoSurprisePercent": 0,
+          "agreement": null
+        },
+        {
+          "quarter": "Q3 2024",
+          "triggerDate": "2024-07-12",
+          "triggerSymbol": "JPM",
+          "echoDate": "2024-07-16",
+          "echoSymbol": "BAC",
+          "gapDays": 4,
+          "triggerResult": null,
+          "echoResult": null,
+          "triggerSurprisePercent": 0,
+          "echoSurprisePercent": 0,
+          "agreement": null
+        },
+        {
+          "quarter": "Q2 2024",
+          "triggerDate": "2024-04-12",
+          "triggerSymbol": "JPM",
+          "echoDate": "2024-04-16",
+          "echoSymbol": "BAC",
+          "gapDays": 4,
+          "triggerResult": null,
+          "echoResult": null,
+          "triggerSurprisePercent": 0,
+          "echoSurprisePercent": 0,
+          "agreement": null
+        },
+        {
+          "quarter": "Q1 2024",
+          "triggerDate": "2024-01-12",
+          "triggerSymbol": "BAC",
+          "echoDate": "2024-01-12",
+          "echoSymbol": "JPM",
+          "gapDays": 0,
+          "triggerResult": null,
+          "echoResult": null,
+          "triggerSurprisePercent": 0,
+          "echoSurprisePercent": 0,
+          "agreement": null
+        }
+      ],
+      "stats": {
+        "beatFollowsBeat": null,
+        "missFollowsMiss": null,
+        "directionAgreement": null,
+        "fundamentalCorrelation": 0,
+        "avgGapDays": 3,
+        "sampleSize": 4
       }
-    ],
-    "stats": {
-      "correlation": 0.28,
-      "accuracy": 25,
-      "avgEchoMove": 2.7,
-      "sampleSize": 4
-    }
-  },
-  "AAPL_MSFT": {
-    "history": [
-      {
-        "quarter": "Q3 2025",
-        "date": "2025-09-30",
-        "triggerResult": "Beat",
-        "triggerSurprisePercent": 2.4,
-        "echoMovePercent": 0.3,
-        "accurate": false
-      },
-      {
-        "quarter": "Q2 2025",
-        "date": "2025-06-30",
-        "triggerResult": "Beat",
-        "triggerSurprisePercent": 7.3,
-        "echoMovePercent": -1.1,
-        "accurate": false
-      },
-      {
-        "quarter": "Q1 2025",
-        "date": "2025-03-31",
-        "triggerResult": "Inline",
-        "triggerSurprisePercent": -0.6,
-        "echoMovePercent": 1.8,
-        "accurate": false
-      },
-      {
-        "quarter": "Q4 2024",
-        "date": "2024-12-31",
-        "triggerResult": "Inline",
-        "triggerSurprisePercent": 0.2,
-        "echoMovePercent": -0.7,
-        "accurate": false
-      }
-    ],
-    "stats": {
-      "correlation": -0.67,
-      "accuracy": 0,
-      "avgEchoMove": 1,
-      "sampleSize": 4
-    }
-  },
-  "XOM_CVX": {
-    "history": [
-      {
-        "quarter": "Q3 2025",
-        "date": "2025-09-30",
-        "triggerResult": "Beat",
-        "triggerSurprisePercent": 2.4,
-        "echoMovePercent": -0.5,
-        "accurate": false
-      },
-      {
-        "quarter": "Q2 2025",
-        "date": "2025-06-30",
-        "triggerResult": "Beat",
-        "triggerSurprisePercent": 5.1,
-        "echoMovePercent": 1.7,
-        "accurate": true
-      },
-      {
-        "quarter": "Q1 2025",
-        "date": "2025-03-31",
-        "triggerResult": "Inline",
-        "triggerSurprisePercent": 0.8,
-        "echoMovePercent": 0.7,
-        "accurate": false
-      },
-      {
-        "quarter": "Q4 2024",
-        "date": "2024-12-31",
-        "triggerResult": "Beat",
-        "triggerSurprisePercent": 5.8,
-        "echoMovePercent": 1.3,
-        "accurate": false
-      }
-    ],
-    "stats": {
-      "correlation": 0.64,
-      "accuracy": 25,
-      "avgEchoMove": 1.1,
-      "sampleSize": 4
     }
   }
 }
