@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState } from 'react'
 import { useStockQuote } from './hooks/useStockQuote'
 import { useEarningsInfo } from './hooks/useEarningsInfo'
 
@@ -105,20 +105,6 @@ const SIGNAL_CARDS = [
     ]
   }
 ]
-
-// Demo stock prices
-const DEMO_PRICES = {
-  AMD: 142.35,
-  NVDA: 487.21,
-  JPM: 198.45,
-  BAC: 35.82,
-  TSLA: 248.92,
-  F: 11.45,
-  AAPL: 189.72,
-  MSFT: 378.91,
-  XOM: 104.56,
-  CVX: 151.23
-}
 
 // Sectors for filtering
 const SECTORS = ['All', 'Technology', 'Finance', 'Automotive', 'Energy']
@@ -271,7 +257,7 @@ function formatSession(hour) {
 }
 
 // Signal Card Component
-function SignalCard({ card, prices, onSetAlert }) {
+function SignalCard({ card, onSetAlert }) {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [feedback, setFeedback] = useState(null)
 
@@ -520,35 +506,8 @@ function SignalCard({ card, prices, onSetAlert }) {
 
 // Main App Component
 function App() {
-  const [isLiveMode, setIsLiveMode] = useState(false)
-  const [prices, setPrices] = useState(DEMO_PRICES)
   const [selectedSector, setSelectedSector] = useState('All')
   const [alertModal, setAlertModal] = useState({ isOpen: false, card: null })
-  const [lastUpdate, setLastUpdate] = useState(new Date())
-
-  // Simulate price updates
-  const updatePrices = useCallback(() => {
-    if (isLiveMode) {
-      setPrices(prevPrices => {
-        const newPrices = { ...prevPrices }
-        Object.keys(newPrices).forEach(symbol => {
-          // Random price fluctuation between -0.5% and +0.5%
-          const change = 1 + (Math.random() - 0.5) * 0.01
-          newPrices[symbol] = Number((newPrices[symbol] * change).toFixed(2))
-        })
-        return newPrices
-      })
-      setLastUpdate(new Date())
-    }
-  }, [isLiveMode])
-
-  // Set up 30-second refresh interval for live mode
-  useEffect(() => {
-    if (isLiveMode) {
-      const interval = setInterval(updatePrices, 30000)
-      return () => clearInterval(interval)
-    }
-  }, [isLiveMode, updatePrices])
 
   // Filter cards by sector
   const filteredCards = SIGNAL_CARDS.filter(
@@ -576,29 +535,10 @@ function App() {
 
             {/* Controls */}
             <div className="flex flex-wrap items-center gap-4">
-              {/* Data Mode Toggle */}
-              <div className="flex items-center gap-2 bg-gray-800 rounded-lg p-1">
-                <button
-                  onClick={() => setIsLiveMode(false)}
-                  className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
-                    !isLiveMode
-                      ? 'bg-gray-700 text-white'
-                      : 'text-gray-400 hover:text-white'
-                  }`}
-                >
-                  Demo
-                </button>
-                <button
-                  onClick={() => setIsLiveMode(true)}
-                  className={`px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-1 ${
-                    isLiveMode
-                      ? 'bg-green-600 text-white'
-                      : 'text-gray-400 hover:text-white'
-                  }`}
-                >
-                  <span className={`w-2 h-2 rounded-full ${isLiveMode ? 'bg-green-300 animate-pulse' : 'bg-gray-500'}`}></span>
-                  Live
-                </button>
+              {/* Live Data Indicator */}
+              <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 rounded-lg border border-gray-700">
+                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                <span className="text-sm text-gray-300">Live Market Data</span>
               </div>
 
               {/* Sector Filter */}
@@ -613,16 +553,6 @@ function App() {
               </select>
             </div>
           </div>
-
-          {/* Last Update Indicator */}
-          {isLiveMode && (
-            <div className="flex items-center gap-2 mt-3 text-xs text-gray-500">
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Last updated: {lastUpdate.toLocaleTimeString()} (refreshes every 30s)
-            </div>
-          )}
         </div>
       </header>
 
@@ -654,7 +584,6 @@ function App() {
             <SignalCard
               key={card.id}
               card={card}
-              prices={prices}
               onSetAlert={handleSetAlert}
             />
           ))}
