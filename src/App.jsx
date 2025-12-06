@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useStockQuote } from './hooks/useStockQuote'
+import { useEarningsInfo } from './hooks/useEarningsInfo'
 
 // Signal card data with sector information
 const SIGNAL_CARDS = [
@@ -254,6 +255,17 @@ function AlertModal({ isOpen, onClose, card }) {
   )
 }
 
+// Helper function to format earnings label
+function formatEarningsLabel(dateStr, hour) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr + 'T00:00:00Z');
+  const short = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  let session = '';
+  if (hour === 'bmo') session = 'BMO';
+  else if (hour === 'amc') session = 'AMC';
+  return session ? `${short} (${session})` : short;
+}
+
 // Signal Card Component
 function SignalCard({ card, prices, onSetAlert }) {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
@@ -262,6 +274,9 @@ function SignalCard({ card, prices, onSetAlert }) {
   // Fetch live stock quotes for both leader and follower stocks
   const { data: leaderQuote, loading: leaderLoading, error: leaderError } = useStockQuote(card.trigger)
   const { data: followerQuote, loading: followerLoading, error: followerError } = useStockQuote(card.echo)
+
+  // Fetch earnings info for the leader/trigger stock
+  const { data: earnings, loading: earningsLoading, error: earningsError } = useEarningsInfo(card.trigger)
 
   const getConfidenceColor = (confidence) => {
     switch (confidence) {
@@ -345,6 +360,31 @@ function SignalCard({ card, prices, onSetAlert }) {
           )}
         </div>
       </div>
+
+      {/* Earnings Badge */}
+      {earningsLoading ? (
+        <div className="flex justify-end mb-4">
+          <span className="bg-slate-800 text-[10px] px-2 py-1 rounded text-gray-400">
+            Loading earnings...
+          </span>
+        </div>
+      ) : !earningsError && earnings && (
+        <div className="flex justify-end mb-4">
+          <span className="bg-slate-800 text-[10px] px-2 py-1 rounded text-gray-300">
+            {earnings.mode === 'next' ? (
+              <>📅 Next Earnings: {formatEarningsLabel(earnings.date, earnings.hour)}</>
+            ) : earnings.mode === 'last' ? (
+              <>📅 Last Earnings: {formatEarningsLabel(earnings.date, earnings.hour)}
+                {earnings.surprisePercent !== undefined && earnings.surprisePercent !== null && (
+                  <span className={earnings.surprisePercent >= 0 ? 'text-green-400' : 'text-red-400'}>
+                    {' '}({earnings.surprisePercent >= 0 ? 'Beat' : 'Miss'} {earnings.surprisePercent >= 0 ? '+' : ''}{earnings.surprisePercent.toFixed(1)}%)
+                  </span>
+                )}
+              </>
+            ) : null}
+          </span>
+        </div>
+      )}
 
       {/* Pattern Description */}
       <p className="text-sm text-gray-300 mb-4">{card.pattern}</p>
