@@ -262,13 +262,6 @@ function formatEarningsDate(dateStr) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-// Helper function to estimate next earnings date (quarterly = ~90 days)
-function estimateNextEarnings(lastDate) {
-  if (!lastDate) return null;
-  const date = new Date(lastDate + 'T00:00:00Z');
-  date.setDate(date.getDate() + 90);
-  return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-}
 
 // Helper function to format session (AMC/BMO)
 function formatSession(hour) {
@@ -382,28 +375,20 @@ function SignalCard({ card, prices, onSetAlert }) {
           </span>
         ) : !leaderEarningsError && leaderEarnings && (
           <span className="bg-slate-800 text-[10px] px-2 py-1 rounded-full inline-flex items-center gap-1 text-gray-300 self-end">
-            {leaderEarnings.mode === 'next' ? (
+            📅 {card.trigger}: Last: {formatEarningsDate(leaderEarnings.last?.date)}
+            {leaderEarnings.last?.surprisePercent != null && (
+              <span className={leaderEarnings.last.surprisePercent >= 0 ? 'text-green-400' : 'text-red-400'}>
+                {' '}({leaderEarnings.last.surprisePercent >= 0 ? 'Beat' : 'Miss'} {leaderEarnings.last.surprisePercent >= 0 ? '+' : ''}{leaderEarnings.last.surprisePercent.toFixed(1)}%)
+              </span>
+            )}
+            {' '}| Next: {leaderEarnings.next?.confirmed ? (
               <>
-                📅 {card.trigger}: Last: {formatEarningsDate(leaderEarnings.lastDate)}
-                {leaderEarnings.lastSurprisePercent != null && (
-                  <span className={leaderEarnings.lastSurprisePercent >= 0 ? 'text-green-400' : 'text-red-400'}>
-                    ({leaderEarnings.lastSurprisePercent >= 0 ? 'Beat' : 'Miss'} {leaderEarnings.lastSurprisePercent >= 0 ? '+' : ''}{leaderEarnings.lastSurprisePercent.toFixed(1)}%)
-                  </span>
-                )}
-                {' '}| Next: {formatEarningsDate(leaderEarnings.date)}
-                {formatSession(leaderEarnings.hour) && ` (${formatSession(leaderEarnings.hour)})`}
+                {formatEarningsDate(leaderEarnings.next.date)}
+                {formatSession(leaderEarnings.next.hour) && ` (${formatSession(leaderEarnings.next.hour)})`}
               </>
-            ) : leaderEarnings.mode === 'last' ? (
-              <>
-                📅 {card.trigger}: Last: {formatEarningsDate(leaderEarnings.date)}
-                {leaderEarnings.surprisePercent != null && (
-                  <span className={leaderEarnings.surprisePercent >= 0 ? 'text-green-400' : 'text-red-400'}>
-                    {' '}({leaderEarnings.surprisePercent >= 0 ? 'Beat' : 'Miss'} {leaderEarnings.surprisePercent >= 0 ? '+' : ''}{leaderEarnings.surprisePercent.toFixed(1)}%)
-                  </span>
-                )}
-                {' '}| Next: ~{estimateNextEarnings(leaderEarnings.date)}
-              </>
-            ) : null}
+            ) : (
+              <>~{leaderEarnings.next?.estimatedDate || 'TBD'}</>
+            )}
           </span>
         )}
 
@@ -414,28 +399,20 @@ function SignalCard({ card, prices, onSetAlert }) {
           </span>
         ) : !followerEarningsError && followerEarnings && (
           <span className="bg-slate-800 text-[10px] px-2 py-1 rounded-full inline-flex items-center gap-1 text-gray-300 self-end">
-            {followerEarnings.mode === 'next' ? (
+            📅 {card.echo}: Last: {formatEarningsDate(followerEarnings.last?.date)}
+            {followerEarnings.last?.surprisePercent != null && (
+              <span className={followerEarnings.last.surprisePercent >= 0 ? 'text-green-400' : 'text-red-400'}>
+                {' '}({followerEarnings.last.surprisePercent >= 0 ? 'Beat' : 'Miss'} {followerEarnings.last.surprisePercent >= 0 ? '+' : ''}{followerEarnings.last.surprisePercent.toFixed(1)}%)
+              </span>
+            )}
+            {' '}| Next: {followerEarnings.next?.confirmed ? (
               <>
-                📅 {card.echo}: Last: {formatEarningsDate(followerEarnings.lastDate)}
-                {followerEarnings.lastSurprisePercent != null && (
-                  <span className={followerEarnings.lastSurprisePercent >= 0 ? 'text-green-400' : 'text-red-400'}>
-                    ({followerEarnings.lastSurprisePercent >= 0 ? 'Beat' : 'Miss'} {followerEarnings.lastSurprisePercent >= 0 ? '+' : ''}{followerEarnings.lastSurprisePercent.toFixed(1)}%)
-                  </span>
-                )}
-                {' '}| Next: {formatEarningsDate(followerEarnings.date)}
-                {formatSession(followerEarnings.hour) && ` (${formatSession(followerEarnings.hour)})`}
+                {formatEarningsDate(followerEarnings.next.date)}
+                {formatSession(followerEarnings.next.hour) && ` (${formatSession(followerEarnings.next.hour)})`}
               </>
-            ) : followerEarnings.mode === 'last' ? (
-              <>
-                📅 {card.echo}: Last: {formatEarningsDate(followerEarnings.date)}
-                {followerEarnings.surprisePercent != null && (
-                  <span className={followerEarnings.surprisePercent >= 0 ? 'text-green-400' : 'text-red-400'}>
-                    {' '}({followerEarnings.surprisePercent >= 0 ? 'Beat' : 'Miss'} {followerEarnings.surprisePercent >= 0 ? '+' : ''}{followerEarnings.surprisePercent.toFixed(1)}%)
-                  </span>
-                )}
-                {' '}| Next: ~{estimateNextEarnings(followerEarnings.date)}
-              </>
-            ) : null}
+            ) : (
+              <>~{followerEarnings.next?.estimatedDate || 'TBD'}</>
+            )}
           </span>
         )}
       </div>
