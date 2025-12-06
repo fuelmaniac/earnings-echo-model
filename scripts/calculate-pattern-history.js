@@ -17,6 +17,10 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
+// Rate limiter utility
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const RATE_LIMIT_MS = 300; // Finnhub free tier limit
+
 // Configuration
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 const TIINGO_BASE_URL = 'https://api.tiingo.com/tiingo/daily';
@@ -85,6 +89,130 @@ async function fetchEarningsHistory(symbol, finnhubKey) {
     console.error(`Error fetching earnings for ${symbol}:`, error.message);
     return [];
   }
+}
+
+/**
+ * Fetch earnings calendar data from Finnhub (has actual report dates)
+ * Docs: https://finnhub.io/docs/api/earnings-calendar
+ */
+async function fetchCalendarEarnings(symbol, finnhubKey) {
+  const fromDate = '2022-01-01';
+  const toDate = '2025-12-31';
+  const url = `${FINNHUB_BASE_URL}/calendar/earnings?symbol=${symbol}&from=${fromDate}&to=${toDate}&token=${finnhubKey}`;
+
+  try {
+    const response = await axios.get(url);
+    const data = response.data;
+
+    // Response format: { earningsCalendar: [{ date, quarter, year, epsActual, epsEstimate, hour }] }
+    if (!data.earningsCalendar || !Array.isArray(data.earningsCalendar)) {
+      console.warn(`  No calendar data for ${symbol}`);
+      return [];
+    }
+
+    return data.earningsCalendar.map(item => ({
+      reportDate: item.date,                          // Actual announcement date: "2024-10-29"
+      fiscalQuarter: `${item.year}-Q${item.quarter}`, // Use Finnhub's quarter field: "2024-Q3"
+      hour: item.hour || 'unknown',                   // "amc" or "bmo"
+      epsActual: item.epsActual,
+      epsEstimate: item.epsEstimate
+    }));
+
+  } catch (error) {
+    console.error(`  Error fetching calendar for ${symbol}:`, error.message);
+    return [];
+  }
+}
+
+/**
+ * Convert period end date to fiscal quarter
+ * Input: "2024-09-30" (fiscal quarter END date from /stock/earnings)
+ * Output: "2024-Q3"
+ */
+function getFiscalQuarterFromPeriod(periodStr) {
+  if (!periodStr) return null;
+
+  const date = new Date(periodStr);
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1;
+
+  // Period end dates: Q1=Mar, Q2=Jun, Q3=Sep, Q4=Dec
+  let quarter;
+  if (month >= 1 && month <= 3) quarter = 'Q1';
+  else if (month >= 4 && month <= 6) quarter = 'Q2';
+  else if (month >= 7 && month <= 9) quarter = 'Q3';
+  else quarter = 'Q4';
+
+  return `${year}-${quarter}`;
+}
+
+/**
+ * Fetch earnings with real report dates (hybrid approach)
+ * Merges calendar endpoint (real dates) with stock/earnings (surprise data)
+ */
+async function fetchHybridEarnings(symbol, finnhubKey) {
+  console.log(`  Fetching earnings for ${symbol}...`);
+
+  // Step 1: Get reportDates from calendar endpoint
+  const calendarData = await fetchCalendarEarnings(symbol, finnhubKey);
+  await delay(RATE_LIMIT_MS); // Rate limit
+
+  console.log(`    Calendar: Found ${calendarData.length} earnings dates`);
+
+  // Step 2: Get surprise data from stock/earnings endpoint
+  let surpriseData = [];
+  try {
+    const response = await axios.get(`${FINNHUB_BASE_URL}/stock/earnings`, {
+      params: {
+        symbol,
+        limit: 20,
+        token: finnhubKey
+      }
+    });
+    surpriseData = response.data || [];
+    console.log(`    Surprise: Found ${surpriseData.length} earnings records`);
+  } catch (error) {
+    console.warn(`    Surprise data failed for ${symbol}:`, error.message);
+  }
+  await delay(RATE_LIMIT_MS); // Rate limit
+
+  // Step 3: Merge by fiscal quarter
+  const mergedEarnings = calendarData.map(cal => {
+    // Find matching surprise data by fiscal quarter
+    const match = surpriseData.find(s =>
+      getFiscalQuarterFromPeriod(s.period) === cal.fiscalQuarter
+    );
+
+    if (match) {
+      console.log(`    ✓ Matched ${cal.fiscalQuarter}: reportDate=${cal.reportDate}, surprise=${match.surprisePercent}%`);
+    }
+
+    return {
+      symbol: symbol,
+      reportDate: cal.reportDate,        // REAL announcement date
+      fiscalQuarter: cal.fiscalQuarter,
+      hour: cal.hour,
+      surprisePercent: match?.surprisePercent ?? null,
+      epsActual: cal.epsActual ?? match?.actual,
+      epsEstimate: cal.epsEstimate ?? match?.estimate
+    };
+  });
+
+  // Fallback: If no calendar data, use period dates (old behavior)
+  if (mergedEarnings.length === 0 && surpriseData.length > 0) {
+    console.warn(`  ⚠️  No calendar data for ${symbol}, falling back to period dates`);
+    return surpriseData.map(s => ({
+      symbol: symbol,
+      reportDate: s.period,  // Using period as fallback (not ideal)
+      fiscalQuarter: getFiscalQuarterFromPeriod(s.period),
+      surprisePercent: s.surprisePercent,
+      epsActual: s.actual,
+      epsEstimate: s.estimate
+    }));
+  }
+
+  console.log(`  ✓ ${symbol}: ${mergedEarnings.length} earnings with real reportDates`);
+  return mergedEarnings;
 }
 
 /**
@@ -268,27 +396,31 @@ function calculateSurprisePercent(earning) {
 
 /**
  * Match earnings from two companies by quarter
+ * Uses reportDate (actual announcement date) for gap calculation
  * Returns array of matched quarters with trigger/echo determined by date order
  */
 function matchQuarterlyEarnings(symbolA, earningsA, symbolB, earningsB) {
-  // Build maps of earnings by year-quarter key
+  // Build maps of earnings by fiscal quarter key
+  // Expects hybrid earnings format with reportDate and fiscalQuarter
   const mapA = new Map();
   const mapB = new Map();
 
   for (const earning of earningsA) {
-    const date = earning.period || earning.date;
-    if (!date) continue;
-    const key = getYearQuarterKey(date);
-    const surprisePercent = calculateSurprisePercent(earning);
-    mapA.set(key, { date, surprisePercent, symbol: symbolA });
+    // Use fiscalQuarter directly if available, otherwise derive from period/date
+    const key = earning.fiscalQuarter || getYearQuarterKey(earning.period || earning.date);
+    // Use reportDate (actual announcement) if available, fallback to period
+    const reportDate = earning.reportDate || earning.period || earning.date;
+    if (!key || !reportDate) continue;
+    const surprisePercent = earning.surprisePercent ?? calculateSurprisePercent(earning);
+    mapA.set(key, { reportDate, surprisePercent, symbol: earning.symbol || symbolA });
   }
 
   for (const earning of earningsB) {
-    const date = earning.period || earning.date;
-    if (!date) continue;
-    const key = getYearQuarterKey(date);
-    const surprisePercent = calculateSurprisePercent(earning);
-    mapB.set(key, { date, surprisePercent, symbol: symbolB });
+    const key = earning.fiscalQuarter || getYearQuarterKey(earning.period || earning.date);
+    const reportDate = earning.reportDate || earning.period || earning.date;
+    if (!key || !reportDate) continue;
+    const surprisePercent = earning.surprisePercent ?? calculateSurprisePercent(earning);
+    mapB.set(key, { reportDate, surprisePercent, symbol: earning.symbol || symbolB });
   }
 
   // Find matching quarters
@@ -305,9 +437,10 @@ function matchQuarterlyEarnings(symbolA, earningsA, symbolB, earningsB) {
     if (dataA.surprisePercent === null || dataB.surprisePercent === null) continue;
 
     // Determine which reports first (trigger) and second (echo)
+    // Using reportDate (actual announcement date) for proper gap calculation
     let trigger, echo;
-    const dateA = new Date(dataA.date);
-    const dateB = new Date(dataB.date);
+    const dateA = new Date(dataA.reportDate);
+    const dateB = new Date(dataB.reportDate);
 
     if (dateA < dateB) {
       trigger = dataA;
@@ -326,7 +459,8 @@ function matchQuarterlyEarnings(symbolA, earningsA, symbolB, earningsB) {
       }
     }
 
-    const gapDays = getDaysBetween(trigger.date, echo.date);
+    // Calculate gap using reportDate (actual announcement dates)
+    const gapDays = getDaysBetween(trigger.reportDate, echo.reportDate);
     const triggerResult = getEarningsResult(trigger.surprisePercent);
     const echoResult = getEarningsResult(echo.surprisePercent);
 
@@ -337,11 +471,14 @@ function matchQuarterlyEarnings(symbolA, earningsA, symbolB, earningsB) {
     const [year, q] = key.split('-');
     const quarterDisplay = `${q} ${year}`;
 
+    // Log the gap calculation for verification
+    console.log(`    ${key}: ${trigger.symbol} (${trigger.reportDate}) → ${echo.symbol} (${echo.reportDate}) = ${gapDays} days`);
+
     const matched = {
       quarter: quarterDisplay,
-      triggerDate: trigger.date,
+      triggerDate: trigger.reportDate,
       triggerSymbol: trigger.symbol,
-      echoDate: echo.date,
+      echoDate: echo.reportDate,
       echoSymbol: echo.symbol,
       gapDays,
       triggerResult,
@@ -535,10 +672,10 @@ function calculateStats(history) {
 async function processStockPair(pair, finnhubKey, tiingoKey) {
   console.log(`\nProcessing ${pair.id} (${pair.trigger} → ${pair.echo})...`);
 
-  // Fetch earnings history for BOTH stocks (uses Finnhub)
-  console.log(`  Fetching earnings for ${pair.trigger} and ${pair.echo}...`);
-  const triggerEarnings = await fetchEarningsHistory(pair.trigger, finnhubKey);
-  const echoEarnings = await fetchEarningsHistory(pair.echo, finnhubKey);
+  // Fetch hybrid earnings (with real reportDates) for BOTH stocks
+  console.log(`  Fetching hybrid earnings (calendar + surprise data)...`);
+  const triggerEarnings = await fetchHybridEarnings(pair.trigger, finnhubKey);
+  const echoEarnings = await fetchHybridEarnings(pair.echo, finnhubKey);
 
   const emptyPriceEcho = {
     history: [],
@@ -562,9 +699,6 @@ async function processStockPair(pair, finnhubKey, tiingoKey) {
       fundamentalEcho: emptyFundamentalEcho
     };
   }
-
-  console.log(`  Found ${triggerEarnings.length} earnings records for ${pair.trigger}`);
-  console.log(`  Found ${echoEarnings?.length || 0} earnings records for ${pair.echo}`);
 
   // ========================================
   // FUNDAMENTAL ECHO CALCULATION
@@ -607,9 +741,9 @@ async function processStockPair(pair, finnhubKey, tiingoKey) {
   // ========================================
   console.log(`\n  --- Price Echo Analysis ---`);
 
-  // Extract all earnings dates and find date range
+  // Extract all earnings dates (use reportDate from hybrid data)
   const earningsDates = triggerEarnings
-    .map(e => e.period || e.date)
+    .map(e => e.reportDate || e.period || e.date)
     .filter(d => d)
     .sort();
 
@@ -649,21 +783,21 @@ async function processStockPair(pair, finnhubKey, tiingoKey) {
   const history = [];
 
   for (const earning of triggerEarnings) {
-    // Finnhub earnings data structure
-    const earningsDate = earning.period || earning.date;
-    const actual = earning.actual;
-    const estimate = earning.estimate;
+    // Use reportDate from hybrid earnings (actual announcement date)
+    const earningsDate = earning.reportDate || earning.period || earning.date;
 
     if (!earningsDate) {
       continue;
     }
 
-    // Calculate surprise percent
-    let surprisePercent = null;
-    if (actual !== null && estimate !== null && estimate !== 0) {
-      surprisePercent = ((actual - estimate) / Math.abs(estimate)) * 100;
-    } else if (earning.surprisePercent !== undefined) {
-      surprisePercent = earning.surprisePercent;
+    // Get surprise percent from hybrid data or calculate it
+    let surprisePercent = earning.surprisePercent;
+    if (surprisePercent === null || surprisePercent === undefined) {
+      const actual = earning.epsActual || earning.actual;
+      const estimate = earning.epsEstimate || earning.estimate;
+      if (actual !== null && estimate !== null && estimate !== 0) {
+        surprisePercent = ((actual - estimate) / Math.abs(estimate)) * 100;
+      }
     }
 
     // Get echo stock movement using price map
@@ -741,6 +875,20 @@ async function main() {
       } else {
         const count = data.fundamentalEcho?.matchedQuarters?.length || 0;
         console.log(`  ${pairId}: Insufficient data (${count} matched quarters, need >= ${MIN_SAMPLE_SIZE})`);
+      }
+    }
+
+    // Validation: Check for avgGapDays = 0 bug
+    console.log('\n=== VALIDATION ===');
+    for (const [pairId, data] of Object.entries(results)) {
+      const stats = data.fundamentalEcho?.stats;
+      if (stats) {
+        console.log(`${pairId}: avgGapDays = ${stats.avgGapDays}`);
+        if (stats.avgGapDays === 0) {
+          console.warn(`⚠️  WARNING: ${pairId} has avgGapDays = 0, check data!`);
+        } else if (stats.avgGapDays > 0 && stats.avgGapDays < 60) {
+          console.log(`✅ ${pairId} looks correct`);
+        }
       }
     }
   } catch (error) {
