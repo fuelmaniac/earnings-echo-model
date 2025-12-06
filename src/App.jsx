@@ -259,8 +259,8 @@ function SignalCard({ card, prices, onSetAlert }) {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [feedback, setFeedback] = useState(null)
 
-  // Fetch live stock quote for the echo (follower) stock
-  const { data: quoteData, loading: quoteLoading, error: quoteError } = useStockQuote(card.echo)
+  // Fetch live stock quote for the trigger (leader) stock
+  const { data: quoteData, loading: quoteLoading, error: quoteError } = useStockQuote(card.trigger)
 
   const getConfidenceColor = (confidence) => {
     switch (confidence) {
@@ -302,7 +302,7 @@ function SignalCard({ card, prices, onSetAlert }) {
           <div className="text-lg font-semibold text-white">${prices[card.trigger]?.toFixed(2) || '---'}</div>
         </div>
         <div className="flex-1 bg-gray-700/50 rounded-lg p-3">
-          <div className="text-xs text-gray-400 mb-1">{card.echo}</div>
+          <div className="text-xs text-gray-400 mb-1">{card.trigger}</div>
           {quoteLoading ? (
             <div className="animate-pulse">
               <div className="h-6 bg-gray-600 rounded w-20 mb-1"></div>
@@ -320,7 +320,7 @@ function SignalCard({ card, prices, onSetAlert }) {
               </div>
             </div>
           ) : (
-            <div className="text-lg font-semibold text-white">${prices[card.echo]?.toFixed(2) || '---'}</div>
+            <div className="text-lg font-semibold text-white">${prices[card.trigger]?.toFixed(2) || '---'}</div>
           )}
         </div>
       </div>
