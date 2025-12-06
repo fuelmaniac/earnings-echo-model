@@ -8,6 +8,17 @@ function toISODate(date) {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * Helper function to estimate next earnings date (last date + 90 days)
+ * Returns formatted string like "Jan 2025"
+ */
+function estimateNextEarnings(lastDateStr) {
+  if (!lastDateStr) return null;
+  const date = new Date(lastDateStr + 'T00:00:00Z');
+  date.setDate(date.getDate() + 90); // Quarterly
+  return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
+
 export default async function handler(req, res) {
   // Set CORS and cache headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -47,64 +58,32 @@ export default async function handler(req, res) {
   }
 
   try {
-    // TIER 1: Try calendar/earnings for future earnings dates
+    // Build URLs for both endpoints
+    const earningsUrl = `https://finnhub.io/api/v1/stock/earnings?symbol=${upperSymbol}&limit=1&token=${apiKey}`;
+
     const today = new Date();
     const oneYearLater = new Date(today);
     oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
-
     const fromDate = toISODate(today);
     const toDate = toISODate(oneYearLater);
-
     const calendarUrl = `https://finnhub.io/api/v1/calendar/earnings?symbol=${upperSymbol}&from=${fromDate}&to=${toDate}&token=${apiKey}`;
 
-    const calendarResponse = await fetch(calendarUrl);
+    // Fetch BOTH endpoints in parallel
+    const [earningsResponse, calendarResponse] = await Promise.all([
+      fetch(earningsUrl),
+      fetch(calendarUrl)
+    ]);
 
-    // Handle rate limiting
-    if (calendarResponse.status === 429) {
-      return res.status(429).json({ error: 'Rate limit exceeded. Please try again later.' });
-    }
-
-    // Check if calendar endpoint is available (not plan-restricted)
-    if (calendarResponse.status !== 402 && calendarResponse.status !== 403) {
-      if (calendarResponse.ok) {
-        const calendarData = await calendarResponse.json();
-
-        // Check if we have future earnings data
-        if (calendarData.earningsCalendar && calendarData.earningsCalendar.length > 0) {
-          const nextEarnings = calendarData.earningsCalendar[0];
-
-          return res.status(200).json({
-            mode: 'next',
-            symbol: upperSymbol,
-            date: nextEarnings.date || null,
-            hour: nextEarnings.hour || null,
-            epsActual: nextEarnings.epsActual ?? null,
-            epsEstimate: nextEarnings.epsEstimate ?? null,
-            surprise: null,
-            surprisePercent: null,
-            year: nextEarnings.year ?? null,
-            quarter: nextEarnings.quarter ?? null,
-            revenueActual: nextEarnings.revenueActual ?? null,
-            revenueEstimate: nextEarnings.revenueEstimate ?? null
-          });
-        }
-      } else {
-        console.error(`Calendar API error: ${calendarResponse.status} ${calendarResponse.statusText}`);
-      }
-    }
-
-    // TIER 2: Fall back to stock/earnings for last reported earnings
-    const earningsUrl = `https://finnhub.io/api/v1/stock/earnings?symbol=${upperSymbol}&limit=1&token=${apiKey}`;
-
-    const earningsResponse = await fetch(earningsUrl);
-
-    // Handle rate limiting
+    // Handle rate limiting on earnings endpoint
     if (earningsResponse.status === 429) {
       return res.status(429).json({ error: 'Rate limit exceeded. Please try again later.' });
     }
 
-    // Handle other non-OK responses
+    // Handle earnings endpoint failure (required for last data)
     if (!earningsResponse.ok) {
+      if (earningsResponse.status === 404) {
+        return res.status(404).json({ error: `No earnings data available for symbol: ${upperSymbol}` });
+      }
       console.error(`Earnings API error: ${earningsResponse.status} ${earningsResponse.statusText}`);
       return res.status(500).json({ error: 'Failed to fetch earnings data' });
     }
@@ -116,21 +95,52 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: `No earnings data available for symbol: ${upperSymbol}` });
     }
 
+    // Build "last" object from stock/earnings response
     const lastEarnings = earningsData[0];
-
-    return res.status(200).json({
-      mode: 'last',
-      symbol: upperSymbol,
+    const last = {
       date: lastEarnings.period || null,
-      hour: null,
       epsActual: lastEarnings.actual ?? null,
       epsEstimate: lastEarnings.estimate ?? null,
       surprise: lastEarnings.surprise ?? null,
       surprisePercent: lastEarnings.surprisePercent ?? null,
-      year: lastEarnings.year ?? null,
-      quarter: lastEarnings.quarter ?? null,
-      revenueActual: null,
-      revenueEstimate: null
+      revenueActual: lastEarnings.revenueActual ?? null,
+      revenueEstimate: lastEarnings.revenueEstimate ?? null
+    };
+
+    // Build "next" object
+    let next = {
+      confirmed: false,
+      date: null,
+      estimatedDate: estimateNextEarnings(last.date),
+      hour: null
+    };
+
+    // Try to get confirmed next earnings from calendar endpoint
+    // Skip if calendar endpoint returned 402/403 (plan-restricted) or rate limited
+    if (calendarResponse.status !== 402 && calendarResponse.status !== 403 && calendarResponse.status !== 429) {
+      if (calendarResponse.ok) {
+        const calendarData = await calendarResponse.json();
+
+        // Check if we have future earnings data
+        if (calendarData.earningsCalendar && calendarData.earningsCalendar.length > 0) {
+          const nextEarnings = calendarData.earningsCalendar[0];
+          next = {
+            confirmed: true,
+            date: nextEarnings.date || null,
+            estimatedDate: null,
+            hour: nextEarnings.hour || null
+          };
+        }
+      } else {
+        console.error(`Calendar API error: ${calendarResponse.status} ${calendarResponse.statusText}`);
+        // Continue with estimated date (already set above)
+      }
+    }
+
+    return res.status(200).json({
+      symbol: upperSymbol,
+      last,
+      next
     });
 
   } catch (error) {
