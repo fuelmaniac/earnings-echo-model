@@ -19,6 +19,17 @@ function estimateNextEarnings(lastDateStr) {
   return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 }
 
+/**
+ * Helper function to calculate approximate months until a date
+ */
+function monthsUntil(dateStr) {
+  const target = new Date(dateStr + 'T00:00:00Z');
+  const today = new Date();
+  const diffMs = target - today;
+  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+  return diffDays / 30; // Approximate months
+}
+
 export default async function handler(req, res) {
   // Set CORS and cache headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -124,12 +135,20 @@ export default async function handler(req, res) {
         // Check if we have future earnings data
         if (calendarData.earningsCalendar && calendarData.earningsCalendar.length > 0) {
           const nextEarnings = calendarData.earningsCalendar[0];
-          next = {
-            confirmed: true,
-            date: nextEarnings.date || null,
-            estimatedDate: null,
-            hour: nextEarnings.hour || null
-          };
+          const confirmedDate = nextEarnings.date || null;
+
+          // Apply 3-month distance check
+          // If confirmed date is more than 3 months away, treat as unconfirmed
+          if (confirmedDate && monthsUntil(confirmedDate) <= 3) {
+            // Date is within 3 months - use confirmed data
+            next = {
+              confirmed: true,
+              date: confirmedDate,
+              estimatedDate: null,
+              hour: nextEarnings.hour || null
+            };
+          }
+          // If > 3 months away, keep the default estimated date (already set above)
         }
       } else {
         console.error(`Calendar API error: ${calendarResponse.status} ${calendarResponse.statusText}`);
