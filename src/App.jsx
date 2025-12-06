@@ -110,17 +110,55 @@ const SIGNAL_CARDS = [
 // Sectors for filtering
 const SECTORS = ['All', 'Technology', 'Finance', 'Automotive', 'Energy']
 
+// Helper function to format avgGapDays into readable text
+function formatGapDays(avgGapDays) {
+  if (avgGapDays === null || avgGapDays === undefined) {
+    return null
+  }
+  if (avgGapDays <= 1) {
+    return 'within 24 hours'
+  }
+  if (avgGapDays <= 7) {
+    return `within ${Math.round(avgGapDays)} days`
+  }
+  return `within ~${Math.round(avgGapDays)} days`
+}
+
+// Helper function to generate dynamic pattern description
+function generatePatternDescription(trigger, echo, avgGapDays) {
+  const gapText = formatGapDays(avgGapDays)
+  if (gapText) {
+    return `${echo} typically moves ${gapText} after ${trigger} earnings`
+  }
+  return null
+}
+
 // Create enriched cards with real pattern history data
 const enrichedCards = SIGNAL_CARDS.map(card => {
   const pairId = `${card.trigger}_${card.echo}`
-  const pattern = PATTERN_HISTORY[pairId]
+  const patternData = PATTERN_HISTORY[pairId]
 
-  if (pattern && pattern.history && pattern.stats) {
+  // Check for fundamentalEcho data with avgGapDays
+  if (patternData && patternData.fundamentalEcho && patternData.fundamentalEcho.stats) {
+    const avgGapDays = patternData.fundamentalEcho.stats.avgGapDays
+    const dynamicPattern = generatePatternDescription(card.trigger, card.echo, avgGapDays)
+
     return {
       ...card,
-      quarterlyHistory: pattern.history,
-      correlation: pattern.stats.correlation || card.correlation,
-      historicalAccuracy: pattern.stats.accuracy || card.historicalAccuracy
+      pattern: dynamicPattern || card.pattern,
+      quarterlyHistory: patternData.priceEcho?.history || card.quarterlyHistory,
+      correlation: patternData.priceEcho?.stats?.correlation || card.correlation,
+      historicalAccuracy: patternData.priceEcho?.stats?.accuracy || card.historicalAccuracy
+    }
+  }
+
+  // Check for legacy priceEcho format
+  if (patternData && patternData.history && patternData.stats) {
+    return {
+      ...card,
+      quarterlyHistory: patternData.history,
+      correlation: patternData.stats.correlation || card.correlation,
+      historicalAccuracy: patternData.stats.accuracy || card.historicalAccuracy
     }
   }
 
