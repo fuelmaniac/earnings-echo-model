@@ -255,15 +255,26 @@ function AlertModal({ isOpen, onClose, card }) {
   )
 }
 
-// Helper function to format earnings label
-function formatEarningsLabel(dateStr, hour) {
+// Helper function to format earnings date
+function formatEarningsDate(dateStr) {
   if (!dateStr) return null;
   const d = new Date(dateStr + 'T00:00:00Z');
-  const short = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  let session = '';
-  if (hour === 'bmo') session = 'BMO';
-  else if (hour === 'amc') session = 'AMC';
-  return session ? `${short} (${session})` : short;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// Helper function to estimate next earnings date (quarterly = ~90 days)
+function estimateNextEarnings(lastDate) {
+  if (!lastDate) return null;
+  const date = new Date(lastDate + 'T00:00:00Z');
+  date.setDate(date.getDate() + 90);
+  return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
+
+// Helper function to format session (AMC/BMO)
+function formatSession(hour) {
+  if (hour === 'bmo') return 'BMO';
+  if (hour === 'amc') return 'AMC';
+  return null;
 }
 
 // Signal Card Component
@@ -275,8 +286,9 @@ function SignalCard({ card, prices, onSetAlert }) {
   const { data: leaderQuote, loading: leaderLoading, error: leaderError } = useStockQuote(card.trigger)
   const { data: followerQuote, loading: followerLoading, error: followerError } = useStockQuote(card.echo)
 
-  // Fetch earnings info for the leader/trigger stock
-  const { data: earnings, loading: earningsLoading, error: earningsError } = useEarningsInfo(card.trigger)
+  // Fetch earnings info for both leader and follower stocks
+  const { data: leaderEarnings, loading: leaderEarningsLoading, error: leaderEarningsError } = useEarningsInfo(card.trigger)
+  const { data: followerEarnings, loading: followerEarningsLoading, error: followerEarningsError } = useEarningsInfo(card.echo)
 
   const getConfidenceColor = (confidence) => {
     switch (confidence) {
@@ -361,30 +373,72 @@ function SignalCard({ card, prices, onSetAlert }) {
         </div>
       </div>
 
-      {/* Earnings Badge */}
-      {earningsLoading ? (
-        <div className="flex justify-end mb-4">
-          <span className="bg-slate-800 text-[10px] px-2 py-1 rounded text-gray-400">
+      {/* Earnings Badges */}
+      <div className="flex flex-col gap-1 mb-4">
+        {/* Leader Stock Earnings Badge */}
+        {leaderEarningsLoading ? (
+          <span className="bg-slate-800 text-[10px] px-2 py-1 rounded-full inline-flex items-center gap-1 text-gray-400 self-end">
             Loading earnings...
           </span>
-        </div>
-      ) : !earningsError && earnings && (
-        <div className="flex justify-end mb-4">
-          <span className="bg-slate-800 text-[10px] px-2 py-1 rounded text-gray-300">
-            {earnings.mode === 'next' ? (
-              <>📅 Next Earnings: {formatEarningsLabel(earnings.date, earnings.hour)}</>
-            ) : earnings.mode === 'last' ? (
-              <>📅 Last Earnings: {formatEarningsLabel(earnings.date, earnings.hour)}
-                {earnings.surprisePercent !== undefined && earnings.surprisePercent !== null && (
-                  <span className={earnings.surprisePercent >= 0 ? 'text-green-400' : 'text-red-400'}>
-                    {' '}({earnings.surprisePercent >= 0 ? 'Beat' : 'Miss'} {earnings.surprisePercent >= 0 ? '+' : ''}{earnings.surprisePercent.toFixed(1)}%)
+        ) : !leaderEarningsError && leaderEarnings && (
+          <span className="bg-slate-800 text-[10px] px-2 py-1 rounded-full inline-flex items-center gap-1 text-gray-300 self-end">
+            {leaderEarnings.mode === 'next' ? (
+              <>
+                📅 {card.trigger}: Last: {formatEarningsDate(leaderEarnings.lastDate)}
+                {leaderEarnings.lastSurprisePercent != null && (
+                  <span className={leaderEarnings.lastSurprisePercent >= 0 ? 'text-green-400' : 'text-red-400'}>
+                    ({leaderEarnings.lastSurprisePercent >= 0 ? 'Beat' : 'Miss'} {leaderEarnings.lastSurprisePercent >= 0 ? '+' : ''}{leaderEarnings.lastSurprisePercent.toFixed(1)}%)
                   </span>
                 )}
+                {' '}| Next: {formatEarningsDate(leaderEarnings.date)}
+                {formatSession(leaderEarnings.hour) && ` (${formatSession(leaderEarnings.hour)})`}
+              </>
+            ) : leaderEarnings.mode === 'last' ? (
+              <>
+                📅 {card.trigger}: Last: {formatEarningsDate(leaderEarnings.date)}
+                {leaderEarnings.surprisePercent != null && (
+                  <span className={leaderEarnings.surprisePercent >= 0 ? 'text-green-400' : 'text-red-400'}>
+                    {' '}({leaderEarnings.surprisePercent >= 0 ? 'Beat' : 'Miss'} {leaderEarnings.surprisePercent >= 0 ? '+' : ''}{leaderEarnings.surprisePercent.toFixed(1)}%)
+                  </span>
+                )}
+                {' '}| Next: ~{estimateNextEarnings(leaderEarnings.date)}
               </>
             ) : null}
           </span>
-        </div>
-      )}
+        )}
+
+        {/* Follower Stock Earnings Badge */}
+        {followerEarningsLoading ? (
+          <span className="bg-slate-800 text-[10px] px-2 py-1 rounded-full inline-flex items-center gap-1 text-gray-400 self-end">
+            Loading earnings...
+          </span>
+        ) : !followerEarningsError && followerEarnings && (
+          <span className="bg-slate-800 text-[10px] px-2 py-1 rounded-full inline-flex items-center gap-1 text-gray-300 self-end">
+            {followerEarnings.mode === 'next' ? (
+              <>
+                📅 {card.echo}: Last: {formatEarningsDate(followerEarnings.lastDate)}
+                {followerEarnings.lastSurprisePercent != null && (
+                  <span className={followerEarnings.lastSurprisePercent >= 0 ? 'text-green-400' : 'text-red-400'}>
+                    ({followerEarnings.lastSurprisePercent >= 0 ? 'Beat' : 'Miss'} {followerEarnings.lastSurprisePercent >= 0 ? '+' : ''}{followerEarnings.lastSurprisePercent.toFixed(1)}%)
+                  </span>
+                )}
+                {' '}| Next: {formatEarningsDate(followerEarnings.date)}
+                {formatSession(followerEarnings.hour) && ` (${formatSession(followerEarnings.hour)})`}
+              </>
+            ) : followerEarnings.mode === 'last' ? (
+              <>
+                📅 {card.echo}: Last: {formatEarningsDate(followerEarnings.date)}
+                {followerEarnings.surprisePercent != null && (
+                  <span className={followerEarnings.surprisePercent >= 0 ? 'text-green-400' : 'text-red-400'}>
+                    {' '}({followerEarnings.surprisePercent >= 0 ? 'Beat' : 'Miss'} {followerEarnings.surprisePercent >= 0 ? '+' : ''}{followerEarnings.surprisePercent.toFixed(1)}%)
+                  </span>
+                )}
+                {' '}| Next: ~{estimateNextEarnings(followerEarnings.date)}
+              </>
+            ) : null}
+          </span>
+        )}
+      </div>
 
       {/* Pattern Description */}
       <p className="text-sm text-gray-300 mb-4">{card.pattern}</p>
