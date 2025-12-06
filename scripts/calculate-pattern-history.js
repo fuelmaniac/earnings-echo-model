@@ -6,7 +6,11 @@
  * This script fetches historical earnings data and calculates pattern accuracy
  * for stock pairs (trigger → echo relationships).
  *
- * Usage: FINNHUB_API_KEY=your_key node scripts/calculate-pattern-history.js
+ * Uses:
+ * - Finnhub API: For earnings data (/stock/earnings)
+ * - Tiingo API: For historical daily close prices
+ *
+ * Usage: FINNHUB_API_KEY=your_key TIINGO_API_KEY=your_key node scripts/calculate-pattern-history.js
  */
 
 const axios = require('axios');
@@ -15,7 +19,7 @@ const path = require('path');
 
 // Configuration
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
-const API_DELAY_MS = 300; // Rate limiting delay between API calls
+const TIINGO_BASE_URL = 'https://api.tiingo.com/tiingo/daily';
 const EARNINGS_LIMIT = 8; // Last 8 earnings to fetch
 
 // Stock pairs to analyze: [triggerSymbol, echoSymbol]
@@ -32,31 +36,33 @@ const TRIGGER_SURPRISE_THRESHOLD = 2.0; // 2%
 const ECHO_MOVE_THRESHOLD = 1.5; // 1.5%
 
 /**
- * Sleep utility for rate limiting
+ * Get API keys from environment
  */
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
+function getApiKeys() {
+  const finnhubKey = process.env.FINNHUB_API_KEY;
+  const tiingoKey = process.env.TIINGO_API_KEY;
 
-/**
- * Get API key from environment
- */
-function getApiKey() {
-  const apiKey = process.env.FINNHUB_API_KEY;
-  if (!apiKey) {
+  if (!finnhubKey) {
     console.error('Error: FINNHUB_API_KEY environment variable is not set.');
     console.error('Please set it before running this script:');
     console.error('  export FINNHUB_API_KEY=your_api_key_here');
-    console.error('  npm run calculate:history');
     process.exit(1);
   }
-  return apiKey;
+
+  if (!tiingoKey) {
+    console.error('Error: TIINGO_API_KEY environment variable is not set.');
+    console.error('Please set it before running this script:');
+    console.error('  export TIINGO_API_KEY=your_api_key_here');
+    process.exit(1);
+  }
+
+  return { finnhubKey, tiingoKey };
 }
 
 /**
- * Fetch earnings history for a stock
+ * Fetch earnings history for a stock (uses Finnhub)
  */
-async function fetchEarningsHistory(symbol, apiKey) {
+async function fetchEarningsHistory(symbol, finnhubKey) {
   const url = `${FINNHUB_BASE_URL}/stock/earnings`;
 
   try {
@@ -64,7 +70,7 @@ async function fetchEarningsHistory(symbol, apiKey) {
       params: {
         symbol,
         limit: EARNINGS_LIMIT,
-        token: apiKey
+        token: finnhubKey
       }
     });
 
@@ -76,85 +82,100 @@ async function fetchEarningsHistory(symbol, apiKey) {
 }
 
 /**
- * Fetch stock candle data for a date range
+ * Fetch historical daily prices from Tiingo API
+ * Returns array of {date, close} objects
  */
-async function fetchCandleData(symbol, fromTimestamp, toTimestamp, apiKey) {
-  const url = `${FINNHUB_BASE_URL}/stock/candle`;
+async function fetchHistoricalPrices(symbol, startDate, endDate, tiingoKey) {
+  const url = `${TIINGO_BASE_URL}/${symbol}/prices`;
 
   try {
     const response = await axios.get(url, {
       params: {
-        symbol,
-        resolution: 'D',
-        from: fromTimestamp,
-        to: toTimestamp,
-        token: apiKey
+        startDate,
+        endDate,
+        token: tiingoKey
+      },
+      headers: {
+        'Content-Type': 'application/json'
       }
     });
 
-    return response.data;
+    return response.data || [];
   } catch (error) {
-    console.error(`Error fetching candle data for ${symbol}:`, error.message);
-    return null;
+    console.error(`Error fetching Tiingo prices for ${symbol}:`, error.message);
+    return [];
   }
 }
 
 /**
- * Calculate T+1 price movement for echo stock around earnings date
- * Returns percentage change from earnings day close to next day close
+ * Build a date→price map from Tiingo response
+ * Keys are YYYY-MM-DD format
  */
-async function calculateEchoMove(echoSymbol, earningsDate, apiKey) {
-  // Parse the earnings date and get timestamps
-  // We need D (earnings day) and D+1 (next trading day)
-  const date = new Date(earningsDate);
+function buildPriceMap(priceData) {
+  const priceMap = new Map();
 
-  // Fetch 5 days of data to account for weekends/holidays
-  const fromDate = new Date(date);
-  fromDate.setDate(fromDate.getDate() - 1);
-  const toDate = new Date(date);
-  toDate.setDate(toDate.getDate() + 5);
-
-  const fromTimestamp = Math.floor(fromDate.getTime() / 1000);
-  const toTimestamp = Math.floor(toDate.getTime() / 1000);
-
-  await sleep(API_DELAY_MS);
-  const candleData = await fetchCandleData(echoSymbol, fromTimestamp, toTimestamp, apiKey);
-
-  if (!candleData || candleData.s !== 'ok' || !candleData.c || candleData.c.length < 2) {
-    return null;
+  for (const item of priceData) {
+    // Tiingo returns date as "2024-10-24T00:00:00.000Z"
+    const dateStr = item.date.split('T')[0];
+    priceMap.set(dateStr, item.close);
   }
 
-  // Find the index of the earnings date in the candle data
-  const earningsTimestamp = Math.floor(date.getTime() / 1000);
+  return priceMap;
+}
 
-  // Find closest trading day to earnings date
-  let earningsDayIndex = -1;
-  if (candleData.t) {
-    for (let i = 0; i < candleData.t.length; i++) {
-      // Check if this is the earnings day or the first trading day after
-      if (candleData.t[i] >= earningsTimestamp - 86400 && candleData.t[i] <= earningsTimestamp + 86400) {
-        earningsDayIndex = i;
-        break;
-      }
-    }
-  }
+/**
+ * Get sorted list of trading dates from price map
+ */
+function getSortedDates(priceMap) {
+  return Array.from(priceMap.keys()).sort();
+}
 
-  // If we couldn't find the exact day, use first two available days
-  if (earningsDayIndex === -1) {
-    earningsDayIndex = 0;
-  }
+/**
+ * Find the next trading day after a given date
+ */
+function findNextTradingDay(dateStr, sortedDates) {
+  const targetDate = new Date(dateStr);
 
-  // Calculate D+1 movement (close to close)
-  if (earningsDayIndex + 1 < candleData.c.length) {
-    const dayClose = candleData.c[earningsDayIndex];
-    const nextDayClose = candleData.c[earningsDayIndex + 1];
-
-    if (dayClose && nextDayClose) {
-      return ((nextDayClose / dayClose) - 1) * 100;
+  for (const tradingDate of sortedDates) {
+    const d = new Date(tradingDate);
+    if (d > targetDate) {
+      return tradingDate;
     }
   }
 
   return null;
+}
+
+/**
+ * Calculate T+1 price movement for echo stock using price map
+ * Returns percentage change from earnings day close (D) to next day close (D+1)
+ */
+function calculateEchoMove(earningsDate, priceMap, sortedDates) {
+  // Get the price on earnings date (D)
+  const preClose = priceMap.get(earningsDate);
+
+  if (preClose === undefined) {
+    console.log(`    Warning: No price data for earnings date ${earningsDate}`);
+    return null;
+  }
+
+  // Find D+1 (next trading day)
+  const nextDay = findNextTradingDay(earningsDate, sortedDates);
+
+  if (!nextDay) {
+    console.log(`    Warning: No next trading day found after ${earningsDate}`);
+    return null;
+  }
+
+  const t1Close = priceMap.get(nextDay);
+
+  if (t1Close === undefined) {
+    console.log(`    Warning: No price data for D+1 ${nextDay}`);
+    return null;
+  }
+
+  // Calculate echo move percent
+  return ((t1Close / preClose) - 1) * 100;
 }
 
 /**
@@ -280,12 +301,11 @@ function calculateStats(history) {
 /**
  * Process a single stock pair
  */
-async function processStockPair(pair, apiKey) {
+async function processStockPair(pair, finnhubKey, tiingoKey) {
   console.log(`\nProcessing ${pair.id} (${pair.trigger} → ${pair.echo})...`);
 
-  // Fetch earnings history for trigger stock
-  await sleep(API_DELAY_MS);
-  const earnings = await fetchEarningsHistory(pair.trigger, apiKey);
+  // Fetch earnings history for trigger stock (uses Finnhub)
+  const earnings = await fetchEarningsHistory(pair.trigger, finnhubKey);
 
   if (!earnings || earnings.length === 0) {
     console.log(`  No earnings data found for ${pair.trigger}`);
@@ -301,6 +321,45 @@ async function processStockPair(pair, apiKey) {
   }
 
   console.log(`  Found ${earnings.length} earnings records for ${pair.trigger}`);
+
+  // Extract all earnings dates and find date range
+  const earningsDates = earnings
+    .map(e => e.period || e.date)
+    .filter(d => d)
+    .sort();
+
+  if (earningsDates.length === 0) {
+    console.log(`  No valid earnings dates found`);
+    return {
+      history: [],
+      stats: { correlation: null, accuracy: 0, avgEchoMove: 0, sampleSize: 0 }
+    };
+  }
+
+  const earliestDate = earningsDates[0];
+  // Add 10 days buffer to endDate to capture D+1 for the latest earnings
+  const latestDate = new Date(earningsDates[earningsDates.length - 1]);
+  latestDate.setDate(latestDate.getDate() + 10);
+  const endDate = latestDate.toISOString().split('T')[0];
+
+  console.log(`  Fetching ${pair.echo} prices from ${earliestDate} to ${endDate}...`);
+
+  // Fetch all historical prices for echo stock in one call (uses Tiingo)
+  const priceData = await fetchHistoricalPrices(pair.echo, earliestDate, endDate, tiingoKey);
+
+  if (!priceData || priceData.length === 0) {
+    console.log(`  No price data found for ${pair.echo}`);
+    return {
+      history: [],
+      stats: { correlation: null, accuracy: 0, avgEchoMove: 0, sampleSize: 0 }
+    };
+  }
+
+  console.log(`  Fetched ${priceData.length} price records for ${pair.echo}`);
+
+  // Build price map for quick lookups
+  const priceMap = buildPriceMap(priceData);
+  const sortedDates = getSortedDates(priceMap);
 
   const history = [];
 
@@ -322,8 +381,8 @@ async function processStockPair(pair, apiKey) {
       surprisePercent = earning.surprisePercent;
     }
 
-    // Get echo stock movement
-    const echoMove = await calculateEchoMove(pair.echo, earningsDate, apiKey);
+    // Get echo stock movement using price map
+    const echoMove = calculateEchoMove(earningsDate, priceMap, sortedDates);
 
     // Determine accuracy
     const accurate = surprisePercent !== null && echoMove !== null
@@ -359,13 +418,15 @@ async function main() {
   console.log('Stock Pattern History Calculator');
   console.log('=================================\n');
 
-  const apiKey = getApiKey();
-  console.log('API key found. Starting analysis...');
+  const { finnhubKey, tiingoKey } = getApiKeys();
+  console.log('API keys found. Starting analysis...');
+  console.log('  - Finnhub: For earnings data');
+  console.log('  - Tiingo: For historical prices');
 
   const results = {};
 
   for (const pair of STOCK_PAIRS) {
-    results[pair.id] = await processStockPair(pair, apiKey);
+    results[pair.id] = await processStockPair(pair, finnhubKey, tiingoKey);
   }
 
   // Write results to JSON file
