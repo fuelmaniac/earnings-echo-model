@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { useStockQuote } from './hooks/useStockQuote'
 
 // Signal card data with sector information
 const SIGNAL_CARDS = [
@@ -258,6 +259,9 @@ function SignalCard({ card, prices, onSetAlert }) {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [feedback, setFeedback] = useState(null)
 
+  // Fetch live stock quote for the echo (follower) stock
+  const { data: quoteData, loading: quoteLoading, error: quoteError } = useStockQuote(card.echo)
+
   const getConfidenceColor = (confidence) => {
     switch (confidence) {
       case 'Very High': return 'text-green-400 bg-green-400/10 border-green-400/30'
@@ -299,7 +303,25 @@ function SignalCard({ card, prices, onSetAlert }) {
         </div>
         <div className="flex-1 bg-gray-700/50 rounded-lg p-3">
           <div className="text-xs text-gray-400 mb-1">{card.echo}</div>
-          <div className="text-lg font-semibold text-white">${prices[card.echo]?.toFixed(2) || '---'}</div>
+          {quoteLoading ? (
+            <div className="animate-pulse">
+              <div className="h-6 bg-gray-600 rounded w-20 mb-1"></div>
+              <div className="h-4 bg-gray-600 rounded w-14"></div>
+            </div>
+          ) : quoteError ? (
+            <div className="text-sm text-gray-500">Price unavailable</div>
+          ) : quoteData ? (
+            <div>
+              <div className="text-lg font-semibold text-white">
+                ${quoteData.price?.toFixed(2)}
+              </div>
+              <div className={`text-sm font-medium ${quoteData.changePercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {quoteData.changePercent >= 0 ? '+' : ''}{quoteData.changePercent?.toFixed(2)}%
+              </div>
+            </div>
+          ) : (
+            <div className="text-lg font-semibold text-white">${prices[card.echo]?.toFixed(2) || '---'}</div>
+          )}
         </div>
       </div>
 
