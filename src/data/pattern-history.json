@@ -1,12 +1,93 @@
 {
   "AMD_NVDA": {
     "priceEcho": {
-      "history": [],
+      "history": [
+        {
+          "quarter": "Q4 2024",
+          "date": "2024-10-29",
+          "triggerMove": null,
+          "echoMove": null,
+          "surprise": 1.1,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "accurate": true
+        },
+        {
+          "quarter": "Q3 2024",
+          "date": "2024-07-30",
+          "triggerMove": null,
+          "echoMove": null,
+          "surprise": 1.5,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "accurate": true
+        },
+        {
+          "quarter": "Q2 2024",
+          "date": "2024-04-30",
+          "triggerMove": null,
+          "echoMove": null,
+          "surprise": 1.6,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "accurate": true
+        },
+        {
+          "quarter": "Q1 2024",
+          "date": "2024-01-30",
+          "triggerMove": null,
+          "echoMove": null,
+          "surprise": 0,
+          "triggerResult": "inline",
+          "echoResult": "beat",
+          "accurate": false
+        },
+        {
+          "quarter": "Q4 2023",
+          "date": "2023-10-31",
+          "triggerMove": null,
+          "echoMove": null,
+          "surprise": 2.9,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "accurate": true
+        },
+        {
+          "quarter": "Q3 2023",
+          "date": "2023-08-01",
+          "triggerMove": null,
+          "echoMove": null,
+          "surprise": 1.8,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "accurate": true
+        },
+        {
+          "quarter": "Q2 2023",
+          "date": "2023-05-02",
+          "triggerMove": null,
+          "echoMove": null,
+          "surprise": 7.1,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "accurate": true
+        },
+        {
+          "quarter": "Q1 2023",
+          "date": "2023-01-31",
+          "triggerMove": null,
+          "echoMove": null,
+          "surprise": 3,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "accurate": true
+        }
+      ],
       "stats": {
         "correlation": null,
-        "accuracy": 0,
-        "avgEchoMove": 0,
-        "sampleSize": 0
+        "accuracy": 0.875,
+        "avgEchoMove": null,
+        "sampleSize": 8
       }
     },
     "fundamentalEcho": {
@@ -128,12 +209,53 @@
   },
   "JPM_BAC": {
     "priceEcho": {
-      "history": [],
+      "history": [
+        {
+          "quarter": "Q4 2024",
+          "date": "2024-10-11",
+          "triggerMove": null,
+          "echoMove": null,
+          "surprise": 9,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "accurate": true
+        },
+        {
+          "quarter": "Q3 2024",
+          "date": "2024-07-12",
+          "triggerMove": null,
+          "echoMove": null,
+          "surprise": 5,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "accurate": true
+        },
+        {
+          "quarter": "Q2 2024",
+          "date": "2024-04-12",
+          "triggerMove": null,
+          "echoMove": null,
+          "surprise": 8,
+          "triggerResult": "beat",
+          "echoResult": "miss",
+          "accurate": false
+        },
+        {
+          "quarter": "Q1 2024",
+          "date": "2024-01-12",
+          "triggerMove": null,
+          "echoMove": null,
+          "surprise": -8.4,
+          "triggerResult": "miss",
+          "echoResult": "beat",
+          "accurate": false
+        }
+      ],
       "stats": {
         "correlation": null,
-        "accuracy": 0,
-        "avgEchoMove": 0,
-        "sampleSize": 0
+        "accuracy": 0.5,
+        "avgEchoMove": null,
+        "sampleSize": 4
       }
     },
     "fundamentalEcho": {
