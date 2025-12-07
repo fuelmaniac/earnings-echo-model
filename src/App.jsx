@@ -110,6 +110,20 @@ const SIGNAL_CARDS = [
 // Sectors for filtering
 const SECTORS = ['All', 'Technology', 'Finance', 'Automotive', 'Energy']
 
+// Company information map for displaying full names
+const COMPANY_INFO = {
+  AMD:  { name: 'Advanced Micro Devices' },
+  NVDA: { name: 'NVIDIA Corporation' },
+  JPM:  { name: 'JPMorgan Chase & Co.' },
+  BAC:  { name: 'Bank of America' },
+  TSLA: { name: 'Tesla, Inc.' },
+  F:    { name: 'Ford Motor Company' },
+  AAPL: { name: 'Apple Inc.' },
+  MSFT: { name: 'Microsoft Corporation' },
+  XOM:  { name: 'Exxon Mobil Corporation' },
+  CVX:  { name: 'Chevron Corporation' }
+}
+
 // Helper function to format avgGapDays into readable text
 function formatGapDays(avgGapDays) {
   if (avgGapDays === null || avgGapDays === undefined) {
@@ -165,6 +179,25 @@ const enrichedCards = SIGNAL_CARDS.map(card => {
   // Fallback to mock data if pattern data not available
   return card
 })
+
+// Helper function to get Trade Playbook data for a specific pair
+function getPlaybookForPair(pairId) {
+  // Only show playbook for AMD_NVDA for now
+  if (pairId !== 'AMD_NVDA') return null
+
+  const patternData = PATTERN_HISTORY[pairId]
+  if (!patternData?.fundamentalEcho?.stats) return null
+
+  const stats = patternData.fundamentalEcho.stats
+  return {
+    trigger: 'AMD',
+    echo: 'NVDA',
+    beatFollowsBeat: stats.beatFollowsBeat,
+    avgGapDays: stats.avgGapDays,
+    sampleSize: stats.sampleSize,
+    directionAgreement: stats.directionAgreement
+  }
+}
 
 // Alert Modal Component
 function AlertModal({ isOpen, onClose, card }) {
@@ -346,13 +379,23 @@ function SignalCard({ card, onSetAlert }) {
       <div className="flex justify-between items-start mb-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-2xl font-bold text-white">{card.trigger}</span>
-            <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="flex flex-col">
+              <span className="text-2xl font-bold text-white">{card.trigger}</span>
+              <span className="text-[11px] text-slate-400 leading-tight">
+                {COMPANY_INFO[card.trigger]?.name || ''}
+              </span>
+            </div>
+            <svg className="w-5 h-5 text-blue-400 self-start mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
             </svg>
-            <span className="text-2xl font-bold text-white">{card.echo}</span>
+            <div className="flex flex-col">
+              <span className="text-2xl font-bold text-white">{card.echo}</span>
+              <span className="text-[11px] text-slate-400 leading-tight">
+                {COMPANY_INFO[card.echo]?.name || ''}
+              </span>
+            </div>
           </div>
-          <span className="text-xs text-gray-400 bg-gray-700 px-2 py-1 rounded">{card.sector}</span>
+          <span className="text-xs text-gray-400 bg-gray-700 px-2 py-1 rounded mt-1 inline-block">{card.sector}</span>
         </div>
         <span className={`text-xs px-2 py-1 rounded border ${getConfidenceColor(card.confidence)}`}>
           {card.confidence}
@@ -463,6 +506,51 @@ function SignalCard({ card, onSetAlert }) {
       {/* Pattern Description */}
       <p className="text-sm text-gray-300 mb-4">{card.pattern}</p>
 
+      {/* Trade Playbook - Only for AMD_NVDA */}
+      {(() => {
+        const pairId = `${card.trigger}_${card.echo}`
+        const playbook = getPlaybookForPair(pairId)
+        if (!playbook) return null
+        return (
+          <div className="bg-gray-700/40 border border-gray-600/50 rounded-lg p-3 mb-4">
+            <div className="text-sm font-semibold text-white mb-2 flex items-center gap-2">
+              <svg className="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+              Trade Playbook
+            </div>
+            <ul className="text-xs text-gray-300 space-y-1.5">
+              <li className="flex items-start gap-2">
+                <span className="text-blue-400 mt-0.5">•</span>
+                <span>
+                  <strong>Trigger:</strong> When {playbook.trigger} earnings beat
+                  <span className="text-gray-400 ml-1">(EPS above expectations / beklenti üstü kâr)</span>
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-green-400 mt-0.5">•</span>
+                <span>
+                  <strong>Behavior:</strong> {playbook.echo} also beat in{' '}
+                  <span className="text-green-400 font-semibold">{playbook.beatFollowsBeat}%</span> of those quarters
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-purple-400 mt-0.5">•</span>
+                <span>
+                  <strong>Timing:</strong> {playbook.echo} earnings are typically ~{playbook.avgGapDays} days after {playbook.trigger}
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-yellow-400 mt-0.5">•</span>
+                <span>
+                  <strong>Sample size:</strong> Based on {playbook.sampleSize} quarters of data
+                </span>
+              </li>
+            </ul>
+          </div>
+        )
+      })()}
+
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="bg-gray-700/30 rounded-lg p-2 text-center">
@@ -493,38 +581,78 @@ function SignalCard({ card, onSetAlert }) {
         </button>
 
         {isHistoryOpen && (
-          <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
+          <div className="mt-2 space-y-1.5 max-h-64 overflow-y-auto">
             {card.quarterlyHistory.map((item, index) => {
-              // Handle both old format (echoMove string) and new format (echoMovePercent number)
-              const echoMoveDisplay = item.echoMove
-                ? item.echoMove
-                : item.echoMovePercent != null
-                  ? `${item.echoMovePercent >= 0 ? '+' : ''}${item.echoMovePercent.toFixed(1)}%`
-                  : 'N/A'
-              const isEchoPositive = item.echoMove
-                ? item.echoMove.startsWith('+')
-                : item.echoMovePercent != null
-                  ? item.echoMovePercent >= 0
-                  : null
-              const triggerResultColor = item.triggerResult === 'Beat'
+              // Determine trigger result label and color
+              const triggerResultLower = (item.triggerResult || '').toLowerCase()
+              const triggerLabel = triggerResultLower === 'beat'
+                ? 'Beat'
+                : triggerResultLower === 'miss'
+                  ? 'Miss'
+                  : 'Inline'
+              const triggerResultColor = triggerResultLower === 'beat'
                 ? 'text-green-400'
-                : item.triggerResult === 'Miss'
+                : triggerResultLower === 'miss'
                   ? 'text-red-400'
                   : 'text-yellow-400'
+
+              // Format trigger surprise percentage
+              const triggerSurpriseDisplay = item.triggerSurprisePercent != null
+                ? `(${item.triggerSurprisePercent >= 0 ? '+' : ''}${item.triggerSurprisePercent.toFixed(1)}%)`
+                : ''
+
+              // Determine echo result label and color
+              const echoResultLower = (item.echoResult || '').toLowerCase()
+              // For old format data without echoResult, derive from echoMovePercent
+              let echoLabel
+              let echoResultColor
+              if (item.echoResult) {
+                echoLabel = echoResultLower === 'beat'
+                  ? 'Beat'
+                  : echoResultLower === 'miss'
+                    ? 'Miss'
+                    : 'Inline'
+                echoResultColor = echoResultLower === 'beat'
+                  ? 'text-green-400'
+                  : echoResultLower === 'miss'
+                    ? 'text-red-400'
+                    : 'text-yellow-400'
+              } else {
+                // Fallback for old format: derive from echoMove or echoMovePercent
+                const echoValue = item.echoMove
+                  ? parseFloat(item.echoMove)
+                  : item.echoMovePercent
+                if (echoValue != null) {
+                  echoLabel = echoValue >= 0 ? 'Beat' : 'Miss'
+                  echoResultColor = echoValue >= 0 ? 'text-green-400' : 'text-red-400'
+                } else {
+                  echoLabel = 'N/A'
+                  echoResultColor = 'text-gray-400'
+                }
+              }
+
+              // Format echo surprise percentage
+              const echoSurpriseDisplay = item.echoMovePercent != null
+                ? `(${item.echoMovePercent >= 0 ? '+' : ''}${item.echoMovePercent.toFixed(1)}%)`
+                : item.echoMove
+                  ? `(${item.echoMove})`
+                  : ''
 
               return (
                 <div
                   key={index}
-                  className="flex items-center justify-between p-2 bg-gray-700/20 rounded text-xs"
+                  className="flex items-center justify-between p-2 bg-gray-700/20 rounded text-xs gap-2"
                 >
-                  <span className="text-gray-400">{item.quarter}</span>
-                  <span className={triggerResultColor}>
-                    {item.triggerResult}
+                  <span className="text-gray-400 shrink-0 w-16">{item.quarter}</span>
+                  <span className={`${triggerResultColor} shrink-0`}>
+                    <span className="text-gray-500">{card.trigger}:</span>{' '}
+                    {triggerLabel}{triggerSurpriseDisplay && <span className="ml-0.5">{triggerSurpriseDisplay}</span>}
                   </span>
-                  <span className={isEchoPositive === null ? 'text-gray-400' : isEchoPositive ? 'text-green-400' : 'text-red-400'}>
-                    {echoMoveDisplay}
+                  <span className={`${echoResultColor} shrink-0`}>
+                    <span className="text-gray-500">{card.echo}:</span>{' '}
+                    {echoLabel}{echoSurpriseDisplay && <span className="ml-0.5">{echoSurpriseDisplay}</span>}
                   </span>
-                  <span className={item.accurate ? 'text-green-400' : 'text-red-400'}>
+                  <span className={`${item.accurate ? 'text-green-400' : 'text-red-400'} shrink-0`}>
                     {item.accurate ? '✓' : '✗'}
                   </span>
                 </div>
