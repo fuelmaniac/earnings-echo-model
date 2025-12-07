@@ -570,22 +570,35 @@ async function processStockPair(pair, tiingoKey) {
   // Populate priceEcho.history from fundamentalEcho data
   // ========================================
   const matchedQuarters = fundamentalEcho.matchedQuarters || [];
-  const priceEchoHistory = matchedQuarters.map(q => ({
-    quarter: q.quarter,
-    date: q.triggerDate,
-    triggerMove: null,  // We don't have intraday price data
-    echoMove: null,
-    surprise: q.triggerSurprisePercent,
-    triggerResult: q.triggerResult,
-    echoResult: q.echoResult,
-    accurate: q.agreement
-  }));
+  const priceEchoHistory = matchedQuarters.map(q => {
+    const echoSurprise = q.echoSurprisePercent;
+
+    return {
+      quarter: q.quarter,
+      date: q.triggerDate,   // trigger earnings date
+      // We don't have intraday price moves here, only fundamental echo
+      triggerMove: null,
+      // Use echo surprise as echoMovePercent so UI can show "+8.0%"
+      echoMovePercent: echoSurprise != null ? echoSurprise : null,
+      // Keep trigger surprise for reference
+      triggerSurprisePercent: q.triggerSurprisePercent ?? null,
+      triggerResult: q.triggerResult || null,
+      echoResult: q.echoResult || null,
+      accurate: q.agreement
+    };
+  });
+
+  // Calculate accuracy as percentage (0-100) for UI display
+  const accurateCount = matchedQuarters.filter(q => q.agreement).length;
+  const accuracyPct = matchedQuarters.length
+    ? Math.round((accurateCount / matchedQuarters.length) * 100)
+    : null;
 
   const priceEchoFromFundamental = {
     history: priceEchoHistory,
     stats: {
       correlation: null,
-      accuracy: matchedQuarters.filter(q => q.agreement).length / (matchedQuarters.length || 1),
+      accuracy: accuracyPct,      // percentage 0-100 for UI
       avgEchoMove: null,
       sampleSize: matchedQuarters.length
     }
