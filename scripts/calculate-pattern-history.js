@@ -688,18 +688,35 @@ async function processStockPair(pair, tiingoKey) {
     console.log(`    ${q.quarter}: Trigger (${triggerInfo}), Echo (${echoInfo})`);
   }
 
-  // Calculate accuracy as percentage (0-100) for UI display
+  // Calculate EPS-based stats
   const accurateCount = matchedQuarters.filter(q => q.agreement).length;
   const accuracyPct = matchedQuarters.length
     ? Math.round((accurateCount / matchedQuarters.length) * 100)
     : null;
 
+  // Calculate EPS surprise correlation between trigger and echo
+  const validForCorrelation = priceEchoHistory.filter(
+    row =>
+      typeof row.triggerSurprisePercent === 'number' &&
+      typeof row.echoSurprisePercent === 'number'
+  );
+
+  let epsCorrelation = null;
+  if (validForCorrelation.length >= 4) {
+    const triggerSurprises = validForCorrelation.map(row => row.triggerSurprisePercent);
+    const echoSurprises = validForCorrelation.map(row => row.echoSurprisePercent);
+    const rawCorr = calculateCorrelation(triggerSurprises, echoSurprises);
+    epsCorrelation = rawCorr !== null ? Math.round(rawCorr * 100) / 100 : null;
+  }
+
+  console.log(`  EPS Correlation: ${epsCorrelation} (based on ${validForCorrelation.length} quarters)`);
+
   const priceEchoFromFundamental = {
     history: priceEchoHistory,
     stats: {
-      correlation: null,
-      accuracy: accuracyPct,      // percentage 0-100 for UI
-      avgEchoMove: null,
+      correlation: epsCorrelation,  // EPS surprise correlation
+      accuracy: accuracyPct,        // percentage 0-100 for UI
+      avgEchoMove: null,            // placeholder for future price reaction
       sampleSize: matchedQuarters.length
     }
   };
