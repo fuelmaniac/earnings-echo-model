@@ -581,11 +581,21 @@ function SignalCard({ card, onSetAlert }) {
         </button>
 
         {isHistoryOpen && (
-          <div className="mt-2 space-y-1.5 max-h-64 overflow-y-auto">
+          <div className="mt-2 space-y-1.5 max-h-80 overflow-y-auto">
             {card.quarterlyHistory.map((item, index) => {
-              // Determine trigger result label and color
+              const triggerSymbol = card.trigger
+              const echoSymbol = card.echo
+
+              // Helper to format percentage values
+              const formatPercent = (value) => {
+                if (value == null || isNaN(value)) return 'N/A'
+                const sign = value >= 0 ? '+' : ''
+                return `${sign}${Number(value).toFixed(1)}%`
+              }
+
+              // Determine trigger result label (with Turkish explanation)
               const triggerResultLower = (item.triggerResult || '').toLowerCase()
-              const triggerLabel = triggerResultLower === 'beat'
+              const triggerResultLabel = triggerResultLower === 'beat'
                 ? 'Beat'
                 : triggerResultLower === 'miss'
                   ? 'Miss'
@@ -596,18 +606,12 @@ function SignalCard({ card, onSetAlert }) {
                   ? 'text-red-400'
                   : 'text-yellow-400'
 
-              // Format trigger surprise percentage
-              const triggerSurpriseDisplay = item.triggerSurprisePercent != null
-                ? `(${item.triggerSurprisePercent >= 0 ? '+' : ''}${item.triggerSurprisePercent.toFixed(1)}%)`
-                : ''
-
-              // Determine echo result label and color
+              // Determine echo result label
               const echoResultLower = (item.echoResult || '').toLowerCase()
-              // For old format data without echoResult, derive from echoMovePercent
-              let echoLabel
+              let echoResultLabel
               let echoResultColor
               if (item.echoResult) {
-                echoLabel = echoResultLower === 'beat'
+                echoResultLabel = echoResultLower === 'beat'
                   ? 'Beat'
                   : echoResultLower === 'miss'
                     ? 'Miss'
@@ -618,43 +622,97 @@ function SignalCard({ card, onSetAlert }) {
                     ? 'text-red-400'
                     : 'text-yellow-400'
               } else {
-                // Fallback for old format: derive from echoMove or echoMovePercent
+                // Fallback for old format: derive from echoMovePercent
                 const echoValue = item.echoMove
                   ? parseFloat(item.echoMove)
                   : item.echoMovePercent
                 if (echoValue != null) {
-                  echoLabel = echoValue >= 0 ? 'Beat' : 'Miss'
+                  echoResultLabel = echoValue >= 0 ? 'Beat' : 'Miss'
                   echoResultColor = echoValue >= 0 ? 'text-green-400' : 'text-red-400'
                 } else {
-                  echoLabel = 'N/A'
+                  echoResultLabel = 'N/A'
                   echoResultColor = 'text-gray-400'
                 }
               }
 
-              // Format echo surprise percentage
-              const echoSurpriseDisplay = item.echoMovePercent != null
-                ? `(${item.echoMovePercent >= 0 ? '+' : ''}${item.echoMovePercent.toFixed(1)}%)`
-                : item.echoMove
-                  ? `(${item.echoMove})`
-                  : ''
+              // Format EPS surprise values
+              const triggerEps = formatPercent(item.triggerSurprisePercent)
+              const echoEps = item.echoSurprisePercent != null
+                ? formatPercent(item.echoSurprisePercent)
+                : (item.echoMovePercent != null ? formatPercent(item.echoMovePercent) : 'N/A')
+
+              // Format Day0 price reaction
+              const triggerPriceD0 = formatPercent(item.triggerDay0MovePercent)
+              const echoPriceD0 = formatPercent(item.echoDay0MovePercent)
+
+              // Day+1 tooltips
+              const triggerPriceTooltip = item.triggerDay1MovePercent != null
+                ? `Day +1: ${formatPercent(item.triggerDay1MovePercent)}`
+                : ''
+              const echoPriceTooltip = item.echoDay1MovePercent != null
+                ? `Day +1: ${formatPercent(item.echoDay1MovePercent)}`
+                : ''
+
+              const isAccurate = item.accurate === true
 
               return (
                 <div
                   key={index}
-                  className="flex items-center justify-between p-2 bg-gray-700/20 rounded text-xs gap-2"
+                  className="flex items-center justify-between py-2 px-2 bg-gray-700/20 rounded text-xs border-b border-slate-800/60 last:border-b-0"
                 >
-                  <span className="text-gray-400 shrink-0 w-16">{item.quarter}</span>
-                  <span className={`${triggerResultColor} shrink-0`}>
-                    <span className="text-gray-500">{card.trigger}:</span>{' '}
-                    {triggerLabel}{triggerSurpriseDisplay && <span className="ml-0.5">{triggerSurpriseDisplay}</span>}
-                  </span>
-                  <span className={`${echoResultColor} shrink-0`}>
-                    <span className="text-gray-500">{card.echo}:</span>{' '}
-                    {echoLabel}{echoSurpriseDisplay && <span className="ml-0.5">{echoSurpriseDisplay}</span>}
-                  </span>
-                  <span className={`${item.accurate ? 'text-green-400' : 'text-red-400'} shrink-0`}>
-                    {item.accurate ? '✓' : '✗'}
-                  </span>
+                  {/* Quarter */}
+                  <div className="w-16 text-slate-400 shrink-0">
+                    {item.quarter}
+                  </div>
+
+                  {/* Trigger company block */}
+                  <div className="flex-1 px-1.5">
+                    <div className="flex flex-col">
+                      <span className={`font-medium ${triggerResultColor}`}>
+                        {triggerSymbol}: {triggerResultLabel}
+                      </span>
+                      <span className="text-[10px] text-slate-400 leading-tight">
+                        EPS: {triggerEps}
+                        {item.triggerDay0MovePercent != null && (
+                          <>
+                            {' · '}
+                            <span title={triggerPriceTooltip} className="cursor-help">
+                              Fiyat: {triggerPriceD0}
+                            </span>
+                          </>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Echo company block */}
+                  <div className="flex-1 px-1.5">
+                    <div className="flex flex-col">
+                      <span className={`font-medium ${echoResultColor}`}>
+                        {echoSymbol}: {echoResultLabel}
+                      </span>
+                      <span className="text-[10px] text-slate-400 leading-tight">
+                        EPS: {echoEps}
+                        {item.echoDay0MovePercent != null && (
+                          <>
+                            {' · '}
+                            <span title={echoPriceTooltip} className="cursor-help">
+                              Fiyat: {echoPriceD0}
+                            </span>
+                          </>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Accuracy checkmark */}
+                  <div className="w-5 flex items-center justify-end shrink-0">
+                    {isAccurate ? (
+                      <span className="text-emerald-400">✓</span>
+                    ) : (
+                      <span className="text-red-400">✗</span>
+                    )}
+                  </div>
                 </div>
               )
             })}

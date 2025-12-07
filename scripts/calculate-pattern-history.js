@@ -79,6 +79,101 @@ function getEarningsDates(symbol) {
 
 
 /**
+ * Fetch daily closes from Tiingo for price reaction calculation
+ * Returns array of {date, close} objects sorted by date
+ */
+async function fetchDailyCloses(symbol, startDate, endDate, tiingoKey) {
+  if (!tiingoKey) {
+    return [];
+  }
+
+  const url = `${TIINGO_BASE_URL}/${symbol}/prices`;
+
+  try {
+    const response = await axios.get(url, {
+      params: {
+        startDate,
+        endDate,
+        token: tiingoKey
+      },
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const data = response.data || [];
+    return data
+      .map(d => ({
+        date: d.date.split('T')[0], // YYYY-MM-DD
+        close: d.close
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  } catch (error) {
+    console.warn(`Tiingo error for ${symbol}:`, error.message);
+    return [];
+  }
+}
+
+/**
+ * Compute Day0 and Day+1 price moves for an earnings event
+ * Day0 = (close on earnings day / close on prior trading day) - 1
+ * Day+1 = (close on day after earnings / close on earnings day) - 1
+ */
+async function computePriceReaction(symbol, earningsDate, tiingoKey) {
+  if (!tiingoKey) {
+    return {
+      day0MovePercent: null,
+      day1MovePercent: null
+    };
+  }
+
+  // earningsDate: "YYYY-MM-DD"
+  const d = new Date(earningsDate);
+  const start = new Date(d);
+  start.setDate(start.getDate() - 5);
+  const end = new Date(d);
+  end.setDate(end.getDate() + 5);
+
+  const startStr = start.toISOString().slice(0, 10);
+  const endStr = end.toISOString().slice(0, 10);
+
+  const closes = await fetchDailyCloses(symbol, startStr, endStr, tiingoKey);
+  if (!closes.length) {
+    return { day0MovePercent: null, day1MovePercent: null };
+  }
+
+  // Find index of earnings date (or nearest next trading day if exact date missing)
+  let day0Index = closes.findIndex(c => c.date === earningsDate);
+  if (day0Index === -1) {
+    // Fallback: find first trading date after earningsDate
+    const afterIdx = closes.findIndex(c => c.date > earningsDate);
+    if (afterIdx === -1) {
+      return { day0MovePercent: null, day1MovePercent: null };
+    }
+    day0Index = afterIdx;
+  }
+
+  const day0 = closes[day0Index];
+  // previous trading day
+  const prev = closes[day0Index - 1];
+  // next trading day
+  const next = closes[day0Index + 1];
+
+  if (!prev) {
+    return { day0MovePercent: null, day1MovePercent: null };
+  }
+
+  const day0MovePercent = ((day0.close / prev.close) - 1) * 100;
+  const day1MovePercent =
+    next ? ((next.close / day0.close) - 1) * 100 : null;
+
+  return {
+    day0MovePercent: Math.round(day0MovePercent * 10) / 10,
+    day1MovePercent: day1MovePercent !== null ? Math.round(day1MovePercent * 10) / 10 : null
+  };
+}
+
+/**
  * Fetch historical daily prices from Tiingo API
  * Returns array of {date, close} objects
  */
@@ -571,25 +666,40 @@ async function processStockPair(pair, tiingoKey) {
 
   // ========================================
   // Populate priceEcho.history from fundamentalEcho data
+  // Now includes Day0/Day+1 price reactions from Tiingo
   // ========================================
   const matchedQuarters = fundamentalEcho.matchedQuarters || [];
-  const priceEchoHistory = matchedQuarters.map(q => {
-    const echoSurprise = q.echoSurprisePercent;
+  const priceEchoHistory = [];
 
-    return {
+  console.log(`\n  --- Computing Price Reactions for ${pair.id} ---`);
+
+  for (const q of matchedQuarters) {
+    // Compute price reactions for trigger and echo stocks
+    const triggerPrice = await computePriceReaction(pair.trigger, q.triggerDate, tiingoKey);
+    const echoPrice = await computePriceReaction(pair.echo, q.echoDate, tiingoKey);
+
+    if (tiingoKey) {
+      console.log(`    ${q.quarter}: ${pair.trigger} D0=${triggerPrice.day0MovePercent}% D1=${triggerPrice.day1MovePercent}% | ${pair.echo} D0=${echoPrice.day0MovePercent}% D1=${echoPrice.day1MovePercent}%`);
+    }
+
+    priceEchoHistory.push({
       quarter: q.quarter,
       date: q.triggerDate,   // trigger earnings date
-      // We don't have intraday price moves here, only fundamental echo
-      triggerMove: null,
-      // Use echo surprise as echoMovePercent so UI can show "+8.0%"
-      echoMovePercent: echoSurprise != null ? echoSurprise : null,
-      // Keep trigger surprise for reference
-      triggerSurprisePercent: q.triggerSurprisePercent ?? null,
+      // Trigger stock data
       triggerResult: q.triggerResult || null,
+      triggerSurprisePercent: q.triggerSurprisePercent ?? null,
+      triggerDay0MovePercent: triggerPrice.day0MovePercent,
+      triggerDay1MovePercent: triggerPrice.day1MovePercent,
+      // Echo stock data
       echoResult: q.echoResult || null,
+      echoSurprisePercent: q.echoSurprisePercent ?? null,
+      echoMovePercent: q.echoSurprisePercent ?? null, // Keep for backward compat
+      echoDay0MovePercent: echoPrice.day0MovePercent,
+      echoDay1MovePercent: echoPrice.day1MovePercent,
+      // Agreement/accuracy flag
       accurate: q.agreement
-    };
-  });
+    });
+  }
 
   // Calculate accuracy as percentage (0-100) for UI display
   const accurateCount = matchedQuarters.filter(q => q.agreement).length;
