@@ -85,7 +85,7 @@
       ],
       "stats": {
         "correlation": null,
-        "accuracy": 0.875,
+        "accuracy": 88,
         "avgEchoMove": null,
         "sampleSize": 8
       }
@@ -253,7 +253,7 @@
       ],
       "stats": {
         "correlation": null,
-        "accuracy": 0.5,
+        "accuracy": 50,
         "avgEchoMove": null,
         "sampleSize": 4
       }

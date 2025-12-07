@@ -585,7 +585,9 @@ async function processStockPair(pair, tiingoKey) {
     history: priceEchoHistory,
     stats: {
       correlation: null,
-      accuracy: matchedQuarters.filter(q => q.agreement).length / (matchedQuarters.length || 1),
+      accuracy: matchedQuarters.length > 0
+        ? Math.round((matchedQuarters.filter(q => q.agreement).length / matchedQuarters.length) * 100)
+        : 0,
       avgEchoMove: null,
       sampleSize: matchedQuarters.length
     }
