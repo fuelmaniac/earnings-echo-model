@@ -62,6 +62,10 @@ Get your free API key at [Finnhub.io](https://finnhub.io/)
 - **Tailwind CSS** - Styling
 - **Finnhub API** - Stock data
 
+## 📋 Runbook
+
+See [RUNBOOK.md](RUNBOOK.md) for step-by-step operational commands to regenerate and deploy pattern history data.
+
 ## 📄 License
 
 MIT License
