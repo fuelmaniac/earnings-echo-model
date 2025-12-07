@@ -567,6 +567,31 @@ async function processStockPair(pair, tiingoKey) {
   }
 
   // ========================================
+  // Populate priceEcho.history from fundamentalEcho data
+  // ========================================
+  const matchedQuarters = fundamentalEcho.matchedQuarters || [];
+  const priceEchoHistory = matchedQuarters.map(q => ({
+    quarter: q.quarter,
+    date: q.triggerDate,
+    triggerMove: null,  // We don't have intraday price data
+    echoMove: null,
+    surprise: q.triggerSurprisePercent,
+    triggerResult: q.triggerResult,
+    echoResult: q.echoResult,
+    accurate: q.agreement
+  }));
+
+  const priceEchoFromFundamental = {
+    history: priceEchoHistory,
+    stats: {
+      correlation: null,
+      accuracy: matchedQuarters.filter(q => q.agreement).length / (matchedQuarters.length || 1),
+      avgEchoMove: null,
+      sampleSize: matchedQuarters.length
+    }
+  };
+
+  // ========================================
   // PRICE ECHO CALCULATION (existing logic)
   // ========================================
   console.log(`\n  --- Price Echo Analysis ---`);
@@ -575,7 +600,7 @@ async function processStockPair(pair, tiingoKey) {
   if (!tiingoKey) {
     console.log(`  Skipped (TIINGO_API_KEY not set)`);
     return {
-      priceEcho: emptyPriceEcho,
+      priceEcho: priceEchoFromFundamental,
       fundamentalEcho
     };
   }
