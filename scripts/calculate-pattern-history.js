@@ -27,7 +27,10 @@ const TIINGO_BASE_URL = 'https://api.tiingo.com/tiingo/daily';
 // Only pairs with static earnings dates in src/data/earnings-dates.json
 const STOCK_PAIRS = [
   { id: 'AMD_NVDA', trigger: 'AMD', echo: 'NVDA' },
-  { id: 'JPM_BAC', trigger: 'JPM', echo: 'BAC' }
+  { id: 'JPM_BAC', trigger: 'JPM', echo: 'BAC' },
+  { id: 'TSLA_F', trigger: 'TSLA', echo: 'F' },
+  { id: 'AAPL_MSFT', trigger: 'AAPL', echo: 'MSFT' },
+  { id: 'XOM_CVX', trigger: 'XOM', echo: 'CVX' }
 ];
 
 // Accuracy thresholds
