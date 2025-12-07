@@ -653,175 +653,51 @@ async function processStockPair(pair, tiingoKey) {
 
   // ========================================
   // Populate priceEcho.history from fundamentalEcho data
-  // with price reaction fields (Day 0 and Day +1 moves)
+  // Phase 1: All price reaction fields set to null
   // ========================================
   const matchedQuarters = fundamentalEcho.matchedQuarters || [];
   const priceEchoHistory = [];
 
-  console.log(`\n  --- Computing Price Reactions ---`);
+  console.log(`\n  --- Building Price Echo History (Phase 1) ---`);
   for (const q of matchedQuarters) {
-    // Compute price reactions for both trigger and echo stocks
-    const triggerPrice = await computePriceReaction(pair.trigger, q.triggerDate, tiingoKey);
-    const echoPrice = await computePriceReaction(pair.echo, q.echoDate, tiingoKey);
-
+    // Phase 1: All price fields are null; will be populated in Phase 2
     priceEchoHistory.push({
       quarter: q.quarter,
       date: q.triggerDate,   // trigger earnings date
       triggerResult: q.triggerResult || null,
       triggerSurprisePercent: q.triggerSurprisePercent ?? null,
-      triggerDay0MovePercent: triggerPrice.day0MovePercent ?? null,
-      triggerDay1MovePercent: triggerPrice.day1MovePercent ?? null,
+      triggerDay0MovePercent: null,  // Phase 2
+      triggerDay1MovePercent: null,  // Phase 2
       echoResult: q.echoResult || null,
       echoSurprisePercent: q.echoSurprisePercent ?? null,
-      echoDay0MovePercent: echoPrice.day0MovePercent ?? null,
-      echoDay1MovePercent: echoPrice.day1MovePercent ?? null,
-      accurate: q.agreement
+      echoDay0MovePercent: null,     // Phase 2
+      echoDay1MovePercent: null,     // Phase 2
+      accurate: q.agreement === true
     });
 
-    // Log computed price reactions
-    const triggerInfo = triggerPrice.day0MovePercent !== null
-      ? `D0=${triggerPrice.day0MovePercent}%, D1=${triggerPrice.day1MovePercent}%`
-      : 'no price data';
-    const echoInfo = echoPrice.day0MovePercent !== null
-      ? `D0=${echoPrice.day0MovePercent}%, D1=${echoPrice.day1MovePercent}%`
-      : 'no price data';
-    console.log(`    ${q.quarter}: Trigger (${triggerInfo}), Echo (${echoInfo})`);
+    // Log entry
+    const triggerInfo = `${q.triggerResult || 'N/A'} (${q.triggerSurprisePercent ?? 'N/A'}%)`;
+    const echoInfo = `${q.echoResult || 'N/A'} (${q.echoSurprisePercent ?? 'N/A'}%)`;
+    console.log(`    ${q.quarter}: Trigger ${triggerInfo} → Echo ${echoInfo}, Accurate: ${q.agreement === true}`);
   }
 
-  // Calculate EPS-based stats
-  const accurateCount = matchedQuarters.filter(q => q.agreement).length;
-  const accuracyPct = matchedQuarters.length
+  // Calculate accuracy as % of entries where accurate === true
+  const accurateCount = priceEchoHistory.filter(h => h.accurate === true).length;
+  const accuracyPct = matchedQuarters.length > 0
     ? Math.round((accurateCount / matchedQuarters.length) * 100)
     : null;
 
-  // Calculate EPS surprise correlation between trigger and echo
-  const validForCorrelation = priceEchoHistory.filter(
-    row =>
-      typeof row.triggerSurprisePercent === 'number' &&
-      typeof row.echoSurprisePercent === 'number'
-  );
+  console.log(`  Price Echo Stats: Accuracy=${accuracyPct}%, Sample Size=${matchedQuarters.length}`);
 
-  let epsCorrelation = null;
-  if (validForCorrelation.length >= 4) {
-    const triggerSurprises = validForCorrelation.map(row => row.triggerSurprisePercent);
-    const echoSurprises = validForCorrelation.map(row => row.echoSurprisePercent);
-    const rawCorr = calculateCorrelation(triggerSurprises, echoSurprises);
-    epsCorrelation = rawCorr !== null ? Math.round(rawCorr * 100) / 100 : null;
-  }
-
-  console.log(`  EPS Correlation: ${epsCorrelation} (based on ${validForCorrelation.length} quarters)`);
-
-  const priceEchoFromFundamental = {
+  const priceEcho = {
     history: priceEchoHistory,
     stats: {
-      correlation: epsCorrelation,  // EPS surprise correlation
-      accuracy: accuracyPct,        // percentage 0-100 for UI
-      avgEchoMove: null,            // placeholder for future price reaction
+      correlation: null,       // Phase 2: will correlate price moves
+      accuracy: accuracyPct,   // % where accurate === true (direction agreement)
+      avgEchoMove: null,       // Phase 2: average echo price move
       sampleSize: matchedQuarters.length
     }
   };
-
-  // ========================================
-  // PRICE ECHO CALCULATION (existing logic)
-  // ========================================
-  console.log(`\n  --- Price Echo Analysis ---`);
-
-  // Skip price echo if no Tiingo API key
-  if (!tiingoKey) {
-    console.log(`  Skipped (TIINGO_API_KEY not set)`);
-    return {
-      priceEcho: priceEchoFromFundamental,
-      fundamentalEcho
-    };
-  }
-
-  // Extract all earnings dates and find date range
-  const triggerDates = triggerEarnings
-    .map(e => e.period || e.date)
-    .filter(d => d)
-    .sort();
-
-  if (triggerDates.length === 0) {
-    console.log(`  No valid earnings dates found`);
-    return {
-      priceEcho: emptyPriceEcho,
-      fundamentalEcho
-    };
-  }
-
-  const earliestDate = triggerDates[0];
-  // Add 10 days buffer to endDate to capture D+1 for the latest earnings
-  const latestDate = new Date(triggerDates[triggerDates.length - 1]);
-  latestDate.setDate(latestDate.getDate() + 10);
-  const endDate = latestDate.toISOString().split('T')[0];
-
-  console.log(`  Fetching ${pair.echo} prices from ${earliestDate} to ${endDate}...`);
-
-  // Fetch all historical prices for echo stock in one call (uses Tiingo)
-  const priceData = await fetchHistoricalPrices(pair.echo, earliestDate, endDate, tiingoKey);
-
-  if (!priceData || priceData.length === 0) {
-    console.log(`  No price data found for ${pair.echo}`);
-    return {
-      priceEcho: emptyPriceEcho,
-      fundamentalEcho
-    };
-  }
-
-  console.log(`  Fetched ${priceData.length} price records for ${pair.echo}`);
-
-  // Build price map for quick lookups
-  const priceMap = buildPriceMap(priceData);
-  const sortedDates = getSortedDates(priceMap);
-
-  const history = [];
-
-  for (const earning of triggerEarnings) {
-    // Finnhub earnings data structure
-    const earningsDate = earning.period || earning.date;
-    const actual = earning.actual;
-    const estimate = earning.estimate;
-
-    if (!earningsDate) {
-      continue;
-    }
-
-    // Calculate surprise percent
-    let surprisePercent = null;
-    if (actual !== null && estimate !== null && estimate !== 0) {
-      surprisePercent = ((actual - estimate) / Math.abs(estimate)) * 100;
-    } else if (earning.surprisePercent !== undefined) {
-      surprisePercent = earning.surprisePercent;
-    }
-
-    // Get echo stock movement using price map
-    const echoMove = calculateEchoMove(earningsDate, priceMap, sortedDates);
-
-    // Determine accuracy
-    const accurate = surprisePercent !== null && echoMove !== null
-      ? isPatternAccurate(surprisePercent, echoMove)
-      : false;
-
-    const entry = {
-      quarter: getQuarterFromDate(earningsDate),
-      date: earningsDate,
-      triggerResult: surprisePercent !== null ? getTriggerResult(surprisePercent) : 'Unknown',
-      triggerSurprisePercent: surprisePercent !== null ? Math.round(surprisePercent * 10) / 10 : null,
-      echoMovePercent: echoMove !== null ? Math.round(echoMove * 10) / 10 : null,
-      accurate
-    };
-
-    history.push(entry);
-
-    console.log(`  ${entry.quarter}: Trigger ${entry.triggerResult} (${entry.triggerSurprisePercent}%), Echo move: ${entry.echoMovePercent}%, Accurate: ${entry.accurate}`);
-  }
-
-  // Calculate statistics
-  const stats = calculateStats(history);
-
-  console.log(`  Price Echo Stats: Correlation=${stats.correlation}, Accuracy=${stats.accuracy}%, Avg Echo Move=${stats.avgEchoMove}%, Sample Size=${stats.sampleSize}`);
-
-  const priceEcho = { history, stats };
 
   return { priceEcho, fundamentalEcho };
 }
