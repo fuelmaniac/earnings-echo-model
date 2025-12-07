@@ -573,8 +573,8 @@ async function processStockPair(pair, tiingoKey) {
   const priceEchoHistory = matchedQuarters.map(q => ({
     quarter: q.quarter,
     date: q.triggerDate,
-    triggerMove: q.triggerSurprisePercent,
-    echoMove: q.echoSurprisePercent,  // Use echo stock's surprise %
+    triggerMove: null,  // We don't have intraday price data
+    echoMove: null,
     surprise: q.triggerSurprisePercent,
     triggerResult: q.triggerResult,
     echoResult: q.echoResult,
@@ -585,9 +585,7 @@ async function processStockPair(pair, tiingoKey) {
     history: priceEchoHistory,
     stats: {
       correlation: null,
-      accuracy: matchedQuarters.length > 0
-        ? Math.round((matchedQuarters.filter(q => q.agreement).length / matchedQuarters.length) * 100)
-        : 0,
+      accuracy: matchedQuarters.filter(q => q.agreement).length / (matchedQuarters.length || 1),
       avgEchoMove: null,
       sampleSize: matchedQuarters.length
     }
