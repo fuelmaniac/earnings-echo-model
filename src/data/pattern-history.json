@@ -108,7 +108,7 @@
         }
       ],
       "stats": {
-        "correlation": null,
+        "correlation": 0.41,
         "accuracy": 88,
         "avgEchoMove": null,
         "sampleSize": 8
@@ -288,7 +288,7 @@
         }
       ],
       "stats": {
-        "correlation": null,
+        "correlation": -0.07,
         "accuracy": 50,
         "avgEchoMove": null,
         "sampleSize": 4
@@ -468,7 +468,7 @@
         }
       ],
       "stats": {
-        "correlation": null,
+        "correlation": 0.06,
         "accuracy": 50,
         "avgEchoMove": null,
         "sampleSize": 8
@@ -700,7 +700,7 @@
         }
       ],
       "stats": {
-        "correlation": null,
+        "correlation": 0.61,
         "accuracy": 75,
         "avgEchoMove": null,
         "sampleSize": 8
@@ -932,7 +932,7 @@
         }
       ],
       "stats": {
-        "correlation": null,
+        "correlation": 0.14,
         "accuracy": 38,
         "avgEchoMove": null,
         "sampleSize": 8
