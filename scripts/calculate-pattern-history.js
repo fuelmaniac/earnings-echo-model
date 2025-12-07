@@ -67,9 +67,10 @@ function getEarningsDates(symbol) {
     period: item.date,
     date: item.date,
     fiscalQuarter: `${item.year}-Q${item.quarter}`,
-    actual: null,
-    estimate: null,
-    surprisePercent: null
+    actual: item.epsActual ?? null,
+    estimate: item.epsEstimate ?? null,
+    surprisePercent: item.surprisePercent ?? null,
+    result: item.result ?? null   // "beat" | "miss" | "inline"
   }));
 }
 
@@ -267,7 +268,7 @@ function matchQuarterlyEarnings(symbolA, earningsA, symbolB, earningsB) {
     if (!date) continue;
     const key = getYearQuarterKey(date);
     const surprisePercent = calculateSurprisePercent(earning);
-    mapA.set(key, { date, surprisePercent, symbol: symbolA });
+    mapA.set(key, { date, surprisePercent, symbol: symbolA, result: earning.result || null });
   }
 
   for (const earning of earningsB) {
@@ -275,7 +276,7 @@ function matchQuarterlyEarnings(symbolA, earningsA, symbolB, earningsB) {
     if (!date) continue;
     const key = getYearQuarterKey(date);
     const surprisePercent = calculateSurprisePercent(earning);
-    mapB.set(key, { date, surprisePercent, symbol: symbolB });
+    mapB.set(key, { date, surprisePercent, symbol: symbolB, result: earning.result || null });
   }
 
   // Find matching quarters
@@ -291,33 +292,16 @@ function matchQuarterlyEarnings(symbolA, earningsA, symbolB, earningsB) {
     if (!dataA || !dataB) continue;
     // Note: We allow null surprisePercent for static data to still calculate avgGapDays
 
-    // Determine which reports first (trigger) and second (echo)
-    let trigger, echo;
-    const dateA = new Date(dataA.date);
-    const dateB = new Date(dataB.date);
-
-    if (dateA < dateB) {
-      trigger = dataA;
-      echo = dataB;
-    } else if (dateB < dateA) {
-      trigger = dataB;
-      echo = dataA;
-    } else {
-      // Same day: use alphabetical order
-      if (symbolA < symbolB) {
-        trigger = dataA;
-        echo = dataB;
-      } else {
-        trigger = dataB;
-        echo = dataA;
-      }
-    }
+    // Always use symbolA as trigger and symbolB as echo (designated pair order)
+    // This ensures consistent stats relative to the pair's designated trigger
+    const trigger = dataA;
+    const echo = dataB;
 
     const gapDays = getDaysBetween(trigger.date, echo.date);
-    const triggerResult = getEarningsResult(trigger.surprisePercent);
-    const echoResult = getEarningsResult(echo.surprisePercent);
+    const triggerResult = trigger.result || null;
+    const echoResult = echo.result || null;
 
-    // Determine agreement (same result direction) - null if no surprise data
+    // Determine agreement (same result direction) - null if no result data
     const agreement = (triggerResult && echoResult) ? triggerResult === echoResult : null;
 
     // Parse quarter for display (e.g., "2024-Q3" → "Q3 2024")
@@ -333,8 +317,8 @@ function matchQuarterlyEarnings(symbolA, earningsA, symbolB, earningsB) {
       gapDays,
       triggerResult,
       echoResult,
-      triggerSurprisePercent: Math.round(trigger.surprisePercent * 10) / 10,
-      echoSurprisePercent: Math.round(echo.surprisePercent * 10) / 10,
+      triggerSurprisePercent: trigger.surprisePercent !== null ? Math.round(trigger.surprisePercent * 10) / 10 : 0,
+      echoSurprisePercent: echo.surprisePercent !== null ? Math.round(echo.surprisePercent * 10) / 10 : 0,
       agreement
     };
 
@@ -353,86 +337,63 @@ function matchQuarterlyEarnings(symbolA, earningsA, symbolB, earningsB) {
  * Calculate fundamental echo statistics from matched quarters
  */
 function calculateFundamentalEchoStats(matchedQuarters) {
-  if (matchedQuarters.length === 0) {
-    return null;
+  if (!matchedQuarters || matchedQuarters.length === 0) {
+    return {
+      beatFollowsBeat: null,
+      missFollowsMiss: null,
+      directionAgreement: null,
+      fundamentalCorrelation: null,
+      avgGapDays: 0,
+      sampleSize: 0
+    };
   }
 
-  // Count beat/miss patterns
-  let triggerBeats = 0;
-  let echoBeatsWhenTriggerBeats = 0;
-  let triggerMisses = 0;
-  let echoMissesWhenTriggerMisses = 0;
-  let agreements = 0;
-  let agreementCount = 0;
-
-  const triggerSurprises = [];
-  const echoSurprises = [];
+  let triggerBeatCount = 0;
+  let echoBeatGivenTriggerBeat = 0;
+  let triggerMissCount = 0;
+  let echoMissGivenTriggerMiss = 0;
+  let sameDirectionCount = 0;
   let totalGapDays = 0;
 
-  for (const q of matchedQuarters) {
-    // Always collect gap days
-    totalGapDays += q.gapDays;
+  matchedQuarters.forEach(q => {
+    // Use lowercase comparison
+    const triggerBeat = q.triggerResult === 'beat';
+    const triggerMiss = q.triggerResult === 'miss';
+    const echoBeat = q.echoResult === 'beat';
+    const echoMiss = q.echoResult === 'miss';
 
-    // Only collect surprise data if available
-    if (q.triggerSurprisePercent !== null) {
-      triggerSurprises.push(q.triggerSurprisePercent);
-    }
-    if (q.echoSurprisePercent !== null) {
-      echoSurprises.push(q.echoSurprisePercent);
-    }
-
-    // Track agreement (only count if both have results)
-    if (q.agreement !== null) {
-      agreementCount++;
-      if (q.agreement) agreements++;
+    // Beat follows Beat
+    if (triggerBeat) {
+      triggerBeatCount++;
+      if (echoBeat) echoBeatGivenTriggerBeat++;
     }
 
-    // Beat follows beat
-    if (q.triggerResult === 'Beat') {
-      triggerBeats++;
-      if (q.echoResult === 'Beat') {
-        echoBeatsWhenTriggerBeats++;
-      }
+    // Miss follows Miss
+    if (triggerMiss) {
+      triggerMissCount++;
+      if (echoMiss) echoMissGivenTriggerMiss++;
     }
 
-    // Miss follows miss
-    if (q.triggerResult === 'Miss') {
-      triggerMisses++;
-      if (q.echoResult === 'Miss') {
-        echoMissesWhenTriggerMisses++;
-      }
+    // Direction agreement (both beat or both miss, excluding inline)
+    if ((triggerBeat && echoBeat) || (triggerMiss && echoMiss)) {
+      sameDirectionCount++;
     }
-  }
 
-  // Calculate probabilities (only if we have data)
-  const beatFollowsBeat = triggerBeats > 0
-    ? Math.round((echoBeatsWhenTriggerBeats / triggerBeats) * 100) / 100
-    : null;
+    totalGapDays += q.gapDays || 0;
+  });
 
-  const missFollowsMiss = triggerMisses > 0
-    ? Math.round((echoMissesWhenTriggerMisses / triggerMisses) * 100) / 100
-    : null;
-
-  const directionAgreement = agreementCount > 0
-    ? Math.round((agreements / agreementCount) * 100) / 100
-    : null;
-
-  // Calculate correlation between surprise percentages
-  const fundamentalCorrelation = (triggerSurprises.length >= MIN_SAMPLE_SIZE && echoSurprises.length >= MIN_SAMPLE_SIZE)
-    ? calculateCorrelation(triggerSurprises, echoSurprises)
-    : null;
-
-  const avgGapDays = Math.round(totalGapDays / matchedQuarters.length);
+  const sampleSize = matchedQuarters.length;
 
   return {
-    beatFollowsBeat,
-    missFollowsMiss,
-    directionAgreement,
-    fundamentalCorrelation: fundamentalCorrelation !== null
-      ? Math.round(fundamentalCorrelation * 100) / 100
-      : null,
-    avgGapDays,
-    sampleSize: matchedQuarters.length
+    beatFollowsBeat: triggerBeatCount > 0 ?
+      Math.round((echoBeatGivenTriggerBeat / triggerBeatCount) * 100) : null,
+    missFollowsMiss: triggerMissCount > 0 ?
+      Math.round((echoMissGivenTriggerMiss / triggerMissCount) * 100) : null,
+    directionAgreement: sampleSize > 0 ?
+      Math.round((sameDirectionCount / sampleSize) * 100) : null,
+    fundamentalCorrelation: null,
+    avgGapDays: sampleSize > 0 ? Math.round(totalGapDays / sampleSize) : 0,
+    sampleSize: sampleSize
   };
 }
 

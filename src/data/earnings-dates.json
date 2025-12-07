@@ -1,34 +1,34 @@
 {
   "AMD": [
-    {"date": "2024-10-29", "quarter": 3, "year": 2024},
-    {"date": "2024-07-30", "quarter": 2, "year": 2024},
-    {"date": "2024-04-30", "quarter": 1, "year": 2024},
-    {"date": "2024-01-30", "quarter": 4, "year": 2023},
-    {"date": "2023-10-31", "quarter": 3, "year": 2023},
-    {"date": "2023-08-01", "quarter": 2, "year": 2023},
-    {"date": "2023-05-02", "quarter": 1, "year": 2023},
-    {"date": "2023-01-31", "quarter": 4, "year": 2022}
+    {"date": "2024-10-29", "quarter": 3, "year": 2024, "epsActual": 0.92, "epsEstimate": 0.91, "surprisePercent": 1.1, "result": "beat"},
+    {"date": "2024-07-30", "quarter": 2, "year": 2024, "epsActual": 0.69, "epsEstimate": 0.68, "surprisePercent": 1.5, "result": "beat"},
+    {"date": "2024-04-30", "quarter": 1, "year": 2024, "epsActual": 0.62, "epsEstimate": 0.61, "surprisePercent": 1.6, "result": "beat"},
+    {"date": "2024-01-30", "quarter": 4, "year": 2023, "epsActual": 0.77, "epsEstimate": 0.77, "surprisePercent": 0.0, "result": "inline"},
+    {"date": "2023-10-31", "quarter": 3, "year": 2023, "epsActual": 0.70, "epsEstimate": 0.68, "surprisePercent": 2.9, "result": "beat"},
+    {"date": "2023-08-01", "quarter": 2, "year": 2023, "epsActual": 0.58, "epsEstimate": 0.57, "surprisePercent": 1.8, "result": "beat"},
+    {"date": "2023-05-02", "quarter": 1, "year": 2023, "epsActual": 0.60, "epsEstimate": 0.56, "surprisePercent": 7.1, "result": "beat"},
+    {"date": "2023-01-31", "quarter": 4, "year": 2022, "epsActual": 0.69, "epsEstimate": 0.67, "surprisePercent": 3.0, "result": "beat"}
   ],
   "NVDA": [
-    {"date": "2024-11-20", "quarter": 3, "year": 2024},
-    {"date": "2024-08-28", "quarter": 2, "year": 2024},
-    {"date": "2024-05-22", "quarter": 1, "year": 2024},
-    {"date": "2024-02-21", "quarter": 4, "year": 2023},
-    {"date": "2023-11-21", "quarter": 3, "year": 2023},
-    {"date": "2023-08-23", "quarter": 2, "year": 2023},
-    {"date": "2023-05-24", "quarter": 1, "year": 2023},
-    {"date": "2023-02-22", "quarter": 4, "year": 2022}
+    {"date": "2024-11-20", "quarter": 3, "year": 2024, "epsActual": 0.81, "epsEstimate": 0.75, "surprisePercent": 8.0, "result": "beat"},
+    {"date": "2024-08-28", "quarter": 2, "year": 2024, "epsActual": 0.68, "epsEstimate": 0.64, "surprisePercent": 6.3, "result": "beat"},
+    {"date": "2024-05-22", "quarter": 1, "year": 2024, "epsActual": 0.61, "epsEstimate": 0.52, "surprisePercent": 17.3, "result": "beat"},
+    {"date": "2024-02-21", "quarter": 4, "year": 2023, "epsActual": 0.52, "epsEstimate": 0.46, "surprisePercent": 13.0, "result": "beat"},
+    {"date": "2023-11-21", "quarter": 3, "year": 2023, "epsActual": 0.40, "epsEstimate": 0.34, "surprisePercent": 17.6, "result": "beat"},
+    {"date": "2023-08-23", "quarter": 2, "year": 2023, "epsActual": 0.27, "epsEstimate": 0.21, "surprisePercent": 28.6, "result": "beat"},
+    {"date": "2023-05-24", "quarter": 1, "year": 2023, "epsActual": 0.11, "epsEstimate": 0.09, "surprisePercent": 22.2, "result": "beat"},
+    {"date": "2023-02-22", "quarter": 4, "year": 2022, "epsActual": 0.08, "epsEstimate": 0.06, "surprisePercent": 33.3, "result": "beat"}
   ],
   "JPM": [
-    {"date": "2024-10-11", "quarter": 3, "year": 2024},
-    {"date": "2024-07-12", "quarter": 2, "year": 2024},
-    {"date": "2024-04-12", "quarter": 1, "year": 2024},
-    {"date": "2024-01-12", "quarter": 4, "year": 2023}
+    {"date": "2024-10-11", "quarter": 3, "year": 2024, "epsActual": 4.37, "epsEstimate": 4.01, "surprisePercent": 9.0, "result": "beat"},
+    {"date": "2024-07-12", "quarter": 2, "year": 2024, "epsActual": 4.40, "epsEstimate": 4.19, "surprisePercent": 5.0, "result": "beat"},
+    {"date": "2024-04-12", "quarter": 1, "year": 2024, "epsActual": 4.44, "epsEstimate": 4.11, "surprisePercent": 8.0, "result": "beat"},
+    {"date": "2024-01-12", "quarter": 4, "year": 2023, "epsActual": 3.04, "epsEstimate": 3.32, "surprisePercent": -8.4, "result": "miss"}
   ],
   "BAC": [
-    {"date": "2024-10-15", "quarter": 3, "year": 2024},
-    {"date": "2024-07-16", "quarter": 2, "year": 2024},
-    {"date": "2024-04-16", "quarter": 1, "year": 2024},
-    {"date": "2024-01-12", "quarter": 4, "year": 2023}
+    {"date": "2024-10-15", "quarter": 3, "year": 2024, "epsActual": 0.81, "epsEstimate": 0.77, "surprisePercent": 5.2, "result": "beat"},
+    {"date": "2024-07-16", "quarter": 2, "year": 2024, "epsActual": 0.83, "epsEstimate": 0.80, "surprisePercent": 3.8, "result": "beat"},
+    {"date": "2024-04-16", "quarter": 1, "year": 2024, "epsActual": 0.76, "epsEstimate": 0.77, "surprisePercent": -1.3, "result": "miss"},
+    {"date": "2024-01-12", "quarter": 4, "year": 2023, "epsActual": 0.70, "epsEstimate": 0.68, "surprisePercent": 2.9, "result": "beat"}
   ]
 }
