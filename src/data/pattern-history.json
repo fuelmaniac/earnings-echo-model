@@ -18,11 +18,11 @@
           "echoDate": "2024-11-20",
           "echoSymbol": "NVDA",
           "gapDays": 22,
-          "triggerResult": null,
-          "echoResult": null,
-          "triggerSurprisePercent": 0,
-          "echoSurprisePercent": 0,
-          "agreement": null
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 1.1,
+          "echoSurprisePercent": 8,
+          "agreement": true
         },
         {
           "quarter": "Q3 2024",
@@ -31,11 +31,11 @@
           "echoDate": "2024-08-28",
           "echoSymbol": "NVDA",
           "gapDays": 29,
-          "triggerResult": null,
-          "echoResult": null,
-          "triggerSurprisePercent": 0,
-          "echoSurprisePercent": 0,
-          "agreement": null
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 1.5,
+          "echoSurprisePercent": 6.3,
+          "agreement": true
         },
         {
           "quarter": "Q2 2024",
@@ -44,11 +44,11 @@
           "echoDate": "2024-05-22",
           "echoSymbol": "NVDA",
           "gapDays": 22,
-          "triggerResult": null,
-          "echoResult": null,
-          "triggerSurprisePercent": 0,
-          "echoSurprisePercent": 0,
-          "agreement": null
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 1.6,
+          "echoSurprisePercent": 17.3,
+          "agreement": true
         },
         {
           "quarter": "Q1 2024",
@@ -57,11 +57,11 @@
           "echoDate": "2024-02-21",
           "echoSymbol": "NVDA",
           "gapDays": 22,
-          "triggerResult": null,
-          "echoResult": null,
+          "triggerResult": "inline",
+          "echoResult": "beat",
           "triggerSurprisePercent": 0,
-          "echoSurprisePercent": 0,
-          "agreement": null
+          "echoSurprisePercent": 13,
+          "agreement": false
         },
         {
           "quarter": "Q4 2023",
@@ -70,11 +70,11 @@
           "echoDate": "2023-11-21",
           "echoSymbol": "NVDA",
           "gapDays": 21,
-          "triggerResult": null,
-          "echoResult": null,
-          "triggerSurprisePercent": 0,
-          "echoSurprisePercent": 0,
-          "agreement": null
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 2.9,
+          "echoSurprisePercent": 17.6,
+          "agreement": true
         },
         {
           "quarter": "Q3 2023",
@@ -83,11 +83,11 @@
           "echoDate": "2023-08-23",
           "echoSymbol": "NVDA",
           "gapDays": 22,
-          "triggerResult": null,
-          "echoResult": null,
-          "triggerSurprisePercent": 0,
-          "echoSurprisePercent": 0,
-          "agreement": null
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 1.8,
+          "echoSurprisePercent": 28.6,
+          "agreement": true
         },
         {
           "quarter": "Q2 2023",
@@ -96,11 +96,11 @@
           "echoDate": "2023-05-24",
           "echoSymbol": "NVDA",
           "gapDays": 22,
-          "triggerResult": null,
-          "echoResult": null,
-          "triggerSurprisePercent": 0,
-          "echoSurprisePercent": 0,
-          "agreement": null
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 7.1,
+          "echoSurprisePercent": 22.2,
+          "agreement": true
         },
         {
           "quarter": "Q1 2023",
@@ -109,18 +109,18 @@
           "echoDate": "2023-02-22",
           "echoSymbol": "NVDA",
           "gapDays": 22,
-          "triggerResult": null,
-          "echoResult": null,
-          "triggerSurprisePercent": 0,
-          "echoSurprisePercent": 0,
-          "agreement": null
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 3,
+          "echoSurprisePercent": 33.3,
+          "agreement": true
         }
       ],
       "stats": {
-        "beatFollowsBeat": null,
+        "beatFollowsBeat": 100,
         "missFollowsMiss": null,
-        "directionAgreement": null,
-        "fundamentalCorrelation": 0,
+        "directionAgreement": 88,
+        "fundamentalCorrelation": null,
         "avgGapDays": 23,
         "sampleSize": 8
       }
@@ -145,11 +145,11 @@
           "echoDate": "2024-10-15",
           "echoSymbol": "BAC",
           "gapDays": 4,
-          "triggerResult": null,
-          "echoResult": null,
-          "triggerSurprisePercent": 0,
-          "echoSurprisePercent": 0,
-          "agreement": null
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 9,
+          "echoSurprisePercent": 5.2,
+          "agreement": true
         },
         {
           "quarter": "Q3 2024",
@@ -158,11 +158,11 @@
           "echoDate": "2024-07-16",
           "echoSymbol": "BAC",
           "gapDays": 4,
-          "triggerResult": null,
-          "echoResult": null,
-          "triggerSurprisePercent": 0,
-          "echoSurprisePercent": 0,
-          "agreement": null
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 5,
+          "echoSurprisePercent": 3.8,
+          "agreement": true
         },
         {
           "quarter": "Q2 2024",
@@ -171,31 +171,31 @@
           "echoDate": "2024-04-16",
           "echoSymbol": "BAC",
           "gapDays": 4,
-          "triggerResult": null,
-          "echoResult": null,
-          "triggerSurprisePercent": 0,
-          "echoSurprisePercent": 0,
-          "agreement": null
+          "triggerResult": "beat",
+          "echoResult": "miss",
+          "triggerSurprisePercent": 8,
+          "echoSurprisePercent": -1.3,
+          "agreement": false
         },
         {
           "quarter": "Q1 2024",
           "triggerDate": "2024-01-12",
-          "triggerSymbol": "BAC",
+          "triggerSymbol": "JPM",
           "echoDate": "2024-01-12",
-          "echoSymbol": "JPM",
+          "echoSymbol": "BAC",
           "gapDays": 0,
-          "triggerResult": null,
-          "echoResult": null,
-          "triggerSurprisePercent": 0,
-          "echoSurprisePercent": 0,
-          "agreement": null
+          "triggerResult": "miss",
+          "echoResult": "beat",
+          "triggerSurprisePercent": -8.4,
+          "echoSurprisePercent": 2.9,
+          "agreement": false
         }
       ],
       "stats": {
-        "beatFollowsBeat": null,
-        "missFollowsMiss": null,
-        "directionAgreement": null,
-        "fundamentalCorrelation": 0,
+        "beatFollowsBeat": 67,
+        "missFollowsMiss": 0,
+        "directionAgreement": 50,
+        "fundamentalCorrelation": null,
         "avgGapDays": 3,
         "sampleSize": 4
       }
