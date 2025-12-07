@@ -143,9 +143,9 @@ async function computePriceReaction(symbol, earningsDate, tiingoKey) {
   try {
     const d = new Date(earningsDate);
     const start = new Date(d);
-    start.setDate(start.getDate() - 5);
+    start.setDate(start.getDate() - 7);
     const end = new Date(d);
-    end.setDate(end.getDate() + 5);
+    end.setDate(end.getDate() + 7);
 
     const startStr = start.toISOString().slice(0, 10);
     const endStr = end.toISOString().slice(0, 10);
