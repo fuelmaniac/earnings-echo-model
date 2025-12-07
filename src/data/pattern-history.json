@@ -6,8 +6,8 @@
           "quarter": "Q4 2024",
           "date": "2024-10-29",
           "triggerMove": null,
-          "echoMove": null,
-          "surprise": 1.1,
+          "echoMovePercent": 8,
+          "triggerSurprisePercent": 1.1,
           "triggerResult": "beat",
           "echoResult": "beat",
           "accurate": true
@@ -16,8 +16,8 @@
           "quarter": "Q3 2024",
           "date": "2024-07-30",
           "triggerMove": null,
-          "echoMove": null,
-          "surprise": 1.5,
+          "echoMovePercent": 6.3,
+          "triggerSurprisePercent": 1.5,
           "triggerResult": "beat",
           "echoResult": "beat",
           "accurate": true
@@ -26,8 +26,8 @@
           "quarter": "Q2 2024",
           "date": "2024-04-30",
           "triggerMove": null,
-          "echoMove": null,
-          "surprise": 1.6,
+          "echoMovePercent": 17.3,
+          "triggerSurprisePercent": 1.6,
           "triggerResult": "beat",
           "echoResult": "beat",
           "accurate": true
@@ -36,8 +36,8 @@
           "quarter": "Q1 2024",
           "date": "2024-01-30",
           "triggerMove": null,
-          "echoMove": null,
-          "surprise": 0,
+          "echoMovePercent": 13,
+          "triggerSurprisePercent": 0,
           "triggerResult": "inline",
           "echoResult": "beat",
           "accurate": false
@@ -46,8 +46,8 @@
           "quarter": "Q4 2023",
           "date": "2023-10-31",
           "triggerMove": null,
-          "echoMove": null,
-          "surprise": 2.9,
+          "echoMovePercent": 17.6,
+          "triggerSurprisePercent": 2.9,
           "triggerResult": "beat",
           "echoResult": "beat",
           "accurate": true
@@ -56,8 +56,8 @@
           "quarter": "Q3 2023",
           "date": "2023-08-01",
           "triggerMove": null,
-          "echoMove": null,
-          "surprise": 1.8,
+          "echoMovePercent": 28.6,
+          "triggerSurprisePercent": 1.8,
           "triggerResult": "beat",
           "echoResult": "beat",
           "accurate": true
@@ -66,8 +66,8 @@
           "quarter": "Q2 2023",
           "date": "2023-05-02",
           "triggerMove": null,
-          "echoMove": null,
-          "surprise": 7.1,
+          "echoMovePercent": 22.2,
+          "triggerSurprisePercent": 7.1,
           "triggerResult": "beat",
           "echoResult": "beat",
           "accurate": true
@@ -76,8 +76,8 @@
           "quarter": "Q1 2023",
           "date": "2023-01-31",
           "triggerMove": null,
-          "echoMove": null,
-          "surprise": 3,
+          "echoMovePercent": 33.3,
+          "triggerSurprisePercent": 3,
           "triggerResult": "beat",
           "echoResult": "beat",
           "accurate": true
@@ -85,7 +85,7 @@
       ],
       "stats": {
         "correlation": null,
-        "accuracy": 0.875,
+        "accuracy": 88,
         "avgEchoMove": null,
         "sampleSize": 8
       }
@@ -214,8 +214,8 @@
           "quarter": "Q4 2024",
           "date": "2024-10-11",
           "triggerMove": null,
-          "echoMove": null,
-          "surprise": 9,
+          "echoMovePercent": 5.2,
+          "triggerSurprisePercent": 9,
           "triggerResult": "beat",
           "echoResult": "beat",
           "accurate": true
@@ -224,8 +224,8 @@
           "quarter": "Q3 2024",
           "date": "2024-07-12",
           "triggerMove": null,
-          "echoMove": null,
-          "surprise": 5,
+          "echoMovePercent": 3.8,
+          "triggerSurprisePercent": 5,
           "triggerResult": "beat",
           "echoResult": "beat",
           "accurate": true
@@ -234,8 +234,8 @@
           "quarter": "Q2 2024",
           "date": "2024-04-12",
           "triggerMove": null,
-          "echoMove": null,
-          "surprise": 8,
+          "echoMovePercent": -1.3,
+          "triggerSurprisePercent": 8,
           "triggerResult": "beat",
           "echoResult": "miss",
           "accurate": false
@@ -244,8 +244,8 @@
           "quarter": "Q1 2024",
           "date": "2024-01-12",
           "triggerMove": null,
-          "echoMove": null,
-          "surprise": -8.4,
+          "echoMovePercent": 2.9,
+          "triggerSurprisePercent": -8.4,
           "triggerResult": "miss",
           "echoResult": "beat",
           "accurate": false
@@ -253,7 +253,7 @@
       ],
       "stats": {
         "correlation": null,
-        "accuracy": 0.5,
+        "accuracy": 50,
         "avgEchoMove": null,
         "sampleSize": 4
       }
