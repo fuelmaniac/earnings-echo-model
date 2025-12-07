@@ -322,5 +322,629 @@
         "sampleSize": 4
       }
     }
+  },
+  "TSLA_F": {
+    "priceEcho": {
+      "history": [
+        {
+          "quarter": "Q4 2024",
+          "date": "2024-10-23",
+          "triggerMove": null,
+          "echoMovePercent": 4.3,
+          "triggerSurprisePercent": 24.1,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "accurate": true
+        },
+        {
+          "quarter": "Q3 2024",
+          "date": "2024-07-23",
+          "triggerMove": null,
+          "echoMovePercent": -30.9,
+          "triggerSurprisePercent": -16.1,
+          "triggerResult": "miss",
+          "echoResult": "miss",
+          "accurate": true
+        },
+        {
+          "quarter": "Q2 2024",
+          "date": "2024-04-23",
+          "triggerMove": null,
+          "echoMovePercent": 16.7,
+          "triggerSurprisePercent": -13.5,
+          "triggerResult": "miss",
+          "echoResult": "beat",
+          "accurate": false
+        },
+        {
+          "quarter": "Q1 2024",
+          "date": "2024-01-24",
+          "triggerMove": null,
+          "echoMovePercent": 141.7,
+          "triggerSurprisePercent": -4.1,
+          "triggerResult": "miss",
+          "echoResult": "beat",
+          "accurate": false
+        },
+        {
+          "quarter": "Q4 2023",
+          "date": "2023-10-18",
+          "triggerMove": null,
+          "echoMovePercent": -13.3,
+          "triggerSurprisePercent": -9.6,
+          "triggerResult": "miss",
+          "echoResult": "miss",
+          "accurate": true
+        },
+        {
+          "quarter": "Q3 2023",
+          "date": "2023-07-19",
+          "triggerMove": null,
+          "echoMovePercent": 41.2,
+          "triggerSurprisePercent": 11,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "accurate": true
+        },
+        {
+          "quarter": "Q2 2023",
+          "date": "2023-04-19",
+          "triggerMove": null,
+          "echoMovePercent": 53.7,
+          "triggerSurprisePercent": -1.2,
+          "triggerResult": "inline",
+          "echoResult": "beat",
+          "accurate": false
+        },
+        {
+          "quarter": "Q1 2023",
+          "date": "2023-01-25",
+          "triggerMove": null,
+          "echoMovePercent": -17.7,
+          "triggerSurprisePercent": 5.3,
+          "triggerResult": "beat",
+          "echoResult": "miss",
+          "accurate": false
+        }
+      ],
+      "stats": {
+        "correlation": null,
+        "accuracy": 50,
+        "avgEchoMove": null,
+        "sampleSize": 8
+      }
+    },
+    "fundamentalEcho": {
+      "matchedQuarters": [
+        {
+          "quarter": "Q4 2024",
+          "triggerDate": "2024-10-23",
+          "triggerSymbol": "TSLA",
+          "echoDate": "2024-10-28",
+          "echoSymbol": "F",
+          "gapDays": 5,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 24.1,
+          "echoSurprisePercent": 4.3,
+          "agreement": true
+        },
+        {
+          "quarter": "Q3 2024",
+          "triggerDate": "2024-07-23",
+          "triggerSymbol": "TSLA",
+          "echoDate": "2024-07-24",
+          "echoSymbol": "F",
+          "gapDays": 1,
+          "triggerResult": "miss",
+          "echoResult": "miss",
+          "triggerSurprisePercent": -16.1,
+          "echoSurprisePercent": -30.9,
+          "agreement": true
+        },
+        {
+          "quarter": "Q2 2024",
+          "triggerDate": "2024-04-23",
+          "triggerSymbol": "TSLA",
+          "echoDate": "2024-04-24",
+          "echoSymbol": "F",
+          "gapDays": 1,
+          "triggerResult": "miss",
+          "echoResult": "beat",
+          "triggerSurprisePercent": -13.5,
+          "echoSurprisePercent": 16.7,
+          "agreement": false
+        },
+        {
+          "quarter": "Q1 2024",
+          "triggerDate": "2024-01-24",
+          "triggerSymbol": "TSLA",
+          "echoDate": "2024-02-06",
+          "echoSymbol": "F",
+          "gapDays": 13,
+          "triggerResult": "miss",
+          "echoResult": "beat",
+          "triggerSurprisePercent": -4.1,
+          "echoSurprisePercent": 141.7,
+          "agreement": false
+        },
+        {
+          "quarter": "Q4 2023",
+          "triggerDate": "2023-10-18",
+          "triggerSymbol": "TSLA",
+          "echoDate": "2023-10-26",
+          "echoSymbol": "F",
+          "gapDays": 8,
+          "triggerResult": "miss",
+          "echoResult": "miss",
+          "triggerSurprisePercent": -9.6,
+          "echoSurprisePercent": -13.3,
+          "agreement": true
+        },
+        {
+          "quarter": "Q3 2023",
+          "triggerDate": "2023-07-19",
+          "triggerSymbol": "TSLA",
+          "echoDate": "2023-07-27",
+          "echoSymbol": "F",
+          "gapDays": 8,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 11,
+          "echoSurprisePercent": 41.2,
+          "agreement": true
+        },
+        {
+          "quarter": "Q2 2023",
+          "triggerDate": "2023-04-19",
+          "triggerSymbol": "TSLA",
+          "echoDate": "2023-05-02",
+          "echoSymbol": "F",
+          "gapDays": 13,
+          "triggerResult": "inline",
+          "echoResult": "beat",
+          "triggerSurprisePercent": -1.2,
+          "echoSurprisePercent": 53.7,
+          "agreement": false
+        },
+        {
+          "quarter": "Q1 2023",
+          "triggerDate": "2023-01-25",
+          "triggerSymbol": "TSLA",
+          "echoDate": "2023-02-02",
+          "echoSymbol": "F",
+          "gapDays": 8,
+          "triggerResult": "beat",
+          "echoResult": "miss",
+          "triggerSurprisePercent": 5.3,
+          "echoSurprisePercent": -17.7,
+          "agreement": false
+        }
+      ],
+      "stats": {
+        "beatFollowsBeat": 67,
+        "missFollowsMiss": 50,
+        "directionAgreement": 50,
+        "fundamentalCorrelation": null,
+        "avgGapDays": 7,
+        "sampleSize": 8
+      }
+    }
+  },
+  "AAPL_MSFT": {
+    "priceEcho": {
+      "history": [
+        {
+          "quarter": "Q4 2024",
+          "date": "2024-10-31",
+          "triggerMove": null,
+          "echoMovePercent": 6.5,
+          "triggerSurprisePercent": 2.5,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "accurate": true
+        },
+        {
+          "quarter": "Q3 2024",
+          "date": "2024-08-01",
+          "triggerMove": null,
+          "echoMovePercent": 0.7,
+          "triggerSurprisePercent": 3.7,
+          "triggerResult": "beat",
+          "echoResult": "inline",
+          "accurate": false
+        },
+        {
+          "quarter": "Q2 2024",
+          "date": "2024-05-02",
+          "triggerMove": null,
+          "echoMovePercent": 3.9,
+          "triggerSurprisePercent": 2,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "accurate": true
+        },
+        {
+          "quarter": "Q1 2024",
+          "date": "2024-02-01",
+          "triggerMove": null,
+          "echoMovePercent": 5.4,
+          "triggerSurprisePercent": 3.8,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "accurate": true
+        },
+        {
+          "quarter": "Q4 2023",
+          "date": "2023-11-02",
+          "triggerMove": null,
+          "echoMovePercent": 12.8,
+          "triggerSurprisePercent": 5,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "accurate": true
+        },
+        {
+          "quarter": "Q3 2023",
+          "date": "2023-08-03",
+          "triggerMove": null,
+          "echoMovePercent": 5.5,
+          "triggerSurprisePercent": 5.9,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "accurate": true
+        },
+        {
+          "quarter": "Q2 2023",
+          "date": "2023-05-04",
+          "triggerMove": null,
+          "echoMovePercent": 9.9,
+          "triggerSurprisePercent": 6.3,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "accurate": true
+        },
+        {
+          "quarter": "Q1 2023",
+          "date": "2023-02-02",
+          "triggerMove": null,
+          "echoMovePercent": 1.3,
+          "triggerSurprisePercent": -3.1,
+          "triggerResult": "miss",
+          "echoResult": "inline",
+          "accurate": false
+        }
+      ],
+      "stats": {
+        "correlation": null,
+        "accuracy": 75,
+        "avgEchoMove": null,
+        "sampleSize": 8
+      }
+    },
+    "fundamentalEcho": {
+      "matchedQuarters": [
+        {
+          "quarter": "Q4 2024",
+          "triggerDate": "2024-10-31",
+          "triggerSymbol": "AAPL",
+          "echoDate": "2024-10-30",
+          "echoSymbol": "MSFT",
+          "gapDays": 1,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 2.5,
+          "echoSurprisePercent": 6.5,
+          "agreement": true
+        },
+        {
+          "quarter": "Q3 2024",
+          "triggerDate": "2024-08-01",
+          "triggerSymbol": "AAPL",
+          "echoDate": "2024-07-30",
+          "echoSymbol": "MSFT",
+          "gapDays": 2,
+          "triggerResult": "beat",
+          "echoResult": "inline",
+          "triggerSurprisePercent": 3.7,
+          "echoSurprisePercent": 0.7,
+          "agreement": false
+        },
+        {
+          "quarter": "Q2 2024",
+          "triggerDate": "2024-05-02",
+          "triggerSymbol": "AAPL",
+          "echoDate": "2024-04-25",
+          "echoSymbol": "MSFT",
+          "gapDays": 7,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 2,
+          "echoSurprisePercent": 3.9,
+          "agreement": true
+        },
+        {
+          "quarter": "Q1 2024",
+          "triggerDate": "2024-02-01",
+          "triggerSymbol": "AAPL",
+          "echoDate": "2024-01-30",
+          "echoSymbol": "MSFT",
+          "gapDays": 2,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 3.8,
+          "echoSurprisePercent": 5.4,
+          "agreement": true
+        },
+        {
+          "quarter": "Q4 2023",
+          "triggerDate": "2023-11-02",
+          "triggerSymbol": "AAPL",
+          "echoDate": "2023-10-24",
+          "echoSymbol": "MSFT",
+          "gapDays": 9,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 5,
+          "echoSurprisePercent": 12.8,
+          "agreement": true
+        },
+        {
+          "quarter": "Q3 2023",
+          "triggerDate": "2023-08-03",
+          "triggerSymbol": "AAPL",
+          "echoDate": "2023-07-25",
+          "echoSymbol": "MSFT",
+          "gapDays": 9,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 5.9,
+          "echoSurprisePercent": 5.5,
+          "agreement": true
+        },
+        {
+          "quarter": "Q2 2023",
+          "triggerDate": "2023-05-04",
+          "triggerSymbol": "AAPL",
+          "echoDate": "2023-04-25",
+          "echoSymbol": "MSFT",
+          "gapDays": 9,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 6.3,
+          "echoSurprisePercent": 9.9,
+          "agreement": true
+        },
+        {
+          "quarter": "Q1 2023",
+          "triggerDate": "2023-02-02",
+          "triggerSymbol": "AAPL",
+          "echoDate": "2023-01-24",
+          "echoSymbol": "MSFT",
+          "gapDays": 9,
+          "triggerResult": "miss",
+          "echoResult": "inline",
+          "triggerSurprisePercent": -3.1,
+          "echoSurprisePercent": 1.3,
+          "agreement": false
+        }
+      ],
+      "stats": {
+        "beatFollowsBeat": 86,
+        "missFollowsMiss": 0,
+        "directionAgreement": 75,
+        "fundamentalCorrelation": null,
+        "avgGapDays": 6,
+        "sampleSize": 8
+      }
+    }
+  },
+  "XOM_CVX": {
+    "priceEcho": {
+      "history": [
+        {
+          "quarter": "Q4 2024",
+          "date": "2024-11-01",
+          "triggerMove": null,
+          "echoMovePercent": 2.9,
+          "triggerSurprisePercent": 2.1,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "accurate": true
+        },
+        {
+          "quarter": "Q3 2024",
+          "date": "2024-08-02",
+          "triggerMove": null,
+          "echoMovePercent": -13,
+          "triggerSurprisePercent": 5.9,
+          "triggerResult": "beat",
+          "echoResult": "miss",
+          "accurate": false
+        },
+        {
+          "quarter": "Q2 2024",
+          "date": "2024-04-26",
+          "triggerMove": null,
+          "echoMovePercent": 3.5,
+          "triggerSurprisePercent": -6.4,
+          "triggerResult": "miss",
+          "echoResult": "beat",
+          "accurate": false
+        },
+        {
+          "quarter": "Q1 2024",
+          "date": "2024-02-02",
+          "triggerMove": null,
+          "echoMovePercent": 7.1,
+          "triggerSurprisePercent": 12.2,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "accurate": true
+        },
+        {
+          "quarter": "Q4 2023",
+          "date": "2023-10-27",
+          "triggerMove": null,
+          "echoMovePercent": -17.1,
+          "triggerSurprisePercent": 0.4,
+          "triggerResult": "inline",
+          "echoResult": "miss",
+          "accurate": false
+        },
+        {
+          "quarter": "Q3 2023",
+          "date": "2023-07-28",
+          "triggerMove": null,
+          "echoMovePercent": 5.1,
+          "triggerSurprisePercent": 0.5,
+          "triggerResult": "inline",
+          "echoResult": "beat",
+          "accurate": false
+        },
+        {
+          "quarter": "Q2 2023",
+          "date": "2023-04-28",
+          "triggerMove": null,
+          "echoMovePercent": 4.4,
+          "triggerSurprisePercent": 8.8,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "accurate": true
+        },
+        {
+          "quarter": "Q1 2023",
+          "date": "2023-01-31",
+          "triggerMove": null,
+          "echoMovePercent": -2.9,
+          "triggerSurprisePercent": 3.3,
+          "triggerResult": "beat",
+          "echoResult": "miss",
+          "accurate": false
+        }
+      ],
+      "stats": {
+        "correlation": null,
+        "accuracy": 38,
+        "avgEchoMove": null,
+        "sampleSize": 8
+      }
+    },
+    "fundamentalEcho": {
+      "matchedQuarters": [
+        {
+          "quarter": "Q4 2024",
+          "triggerDate": "2024-11-01",
+          "triggerSymbol": "XOM",
+          "echoDate": "2024-11-01",
+          "echoSymbol": "CVX",
+          "gapDays": 0,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 2.1,
+          "echoSurprisePercent": 2.9,
+          "agreement": true
+        },
+        {
+          "quarter": "Q3 2024",
+          "triggerDate": "2024-08-02",
+          "triggerSymbol": "XOM",
+          "echoDate": "2024-08-02",
+          "echoSymbol": "CVX",
+          "gapDays": 0,
+          "triggerResult": "beat",
+          "echoResult": "miss",
+          "triggerSurprisePercent": 5.9,
+          "echoSurprisePercent": -13,
+          "agreement": false
+        },
+        {
+          "quarter": "Q2 2024",
+          "triggerDate": "2024-04-26",
+          "triggerSymbol": "XOM",
+          "echoDate": "2024-04-26",
+          "echoSymbol": "CVX",
+          "gapDays": 0,
+          "triggerResult": "miss",
+          "echoResult": "beat",
+          "triggerSurprisePercent": -6.4,
+          "echoSurprisePercent": 3.5,
+          "agreement": false
+        },
+        {
+          "quarter": "Q1 2024",
+          "triggerDate": "2024-02-02",
+          "triggerSymbol": "XOM",
+          "echoDate": "2024-02-02",
+          "echoSymbol": "CVX",
+          "gapDays": 0,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 12.2,
+          "echoSurprisePercent": 7.1,
+          "agreement": true
+        },
+        {
+          "quarter": "Q4 2023",
+          "triggerDate": "2023-10-27",
+          "triggerSymbol": "XOM",
+          "echoDate": "2023-10-27",
+          "echoSymbol": "CVX",
+          "gapDays": 0,
+          "triggerResult": "inline",
+          "echoResult": "miss",
+          "triggerSurprisePercent": 0.4,
+          "echoSurprisePercent": -17.1,
+          "agreement": false
+        },
+        {
+          "quarter": "Q3 2023",
+          "triggerDate": "2023-07-28",
+          "triggerSymbol": "XOM",
+          "echoDate": "2023-07-28",
+          "echoSymbol": "CVX",
+          "gapDays": 0,
+          "triggerResult": "inline",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 0.5,
+          "echoSurprisePercent": 5.1,
+          "agreement": false
+        },
+        {
+          "quarter": "Q2 2023",
+          "triggerDate": "2023-04-28",
+          "triggerSymbol": "XOM",
+          "echoDate": "2023-04-28",
+          "echoSymbol": "CVX",
+          "gapDays": 0,
+          "triggerResult": "beat",
+          "echoResult": "beat",
+          "triggerSurprisePercent": 8.8,
+          "echoSurprisePercent": 4.4,
+          "agreement": true
+        },
+        {
+          "quarter": "Q1 2023",
+          "triggerDate": "2023-01-31",
+          "triggerSymbol": "XOM",
+          "echoDate": "2023-01-27",
+          "echoSymbol": "CVX",
+          "gapDays": 4,
+          "triggerResult": "beat",
+          "echoResult": "miss",
+          "triggerSurprisePercent": 3.3,
+          "echoSurprisePercent": -2.9,
+          "agreement": false
+        }
+      ],
+      "stats": {
+        "beatFollowsBeat": 60,
+        "missFollowsMiss": 0,
+        "directionAgreement": 38,
+        "fundamentalCorrelation": null,
+        "avgGapDays": 1,
+        "sampleSize": 8
+      }
+    }
   }
 }
