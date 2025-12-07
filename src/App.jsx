@@ -596,13 +596,14 @@ function SignalCard({ card, onSetAlert }) {
                   ? 'text-red-400'
                   : 'text-yellow-400'
 
-              // Format trigger EPS surprise percentage
-              const formatEpsPercent = (value) => {
+              // Format percentage helper
+              const formatPercent = (value) => {
                 if (value == null || isNaN(value)) return 'N/A'
                 const sign = value >= 0 ? '+' : ''
                 return `${sign}${value.toFixed(1)}%`
               }
-              const triggerEpsDisplay = formatEpsPercent(item.triggerSurprisePercent)
+              const triggerEpsDisplay = formatPercent(item.triggerSurprisePercent)
+              const triggerDay0Display = formatPercent(item.triggerDay0MovePercent)
 
               // Determine echo result label and color
               const echoResultLower = (item.echoResult || '').toLowerCase()
@@ -634,8 +635,9 @@ function SignalCard({ card, onSetAlert }) {
                 }
               }
 
-              // Format echo EPS surprise percentage (use echoSurprisePercent, not echoMovePercent)
-              const echoEpsDisplay = formatEpsPercent(item.echoSurprisePercent)
+              // Format echo EPS surprise percentage and Day0 price move
+              const echoEpsDisplay = formatPercent(item.echoSurprisePercent)
+              const echoDay0Display = formatPercent(item.echoDay0MovePercent)
 
               return (
                 <div
@@ -646,12 +648,16 @@ function SignalCard({ card, onSetAlert }) {
                   <span className={`${triggerResultColor} shrink-0`}>
                     <span className="text-gray-500">{card.trigger}:</span>{' '}
                     {triggerLabel}
-                    <span className="text-[10px] text-slate-400 ml-1">(EPS: {triggerEpsDisplay})</span>
+                    <span className="text-[10px] text-slate-400 ml-1">
+                      (EPS {triggerEpsDisplay}, Fiyat gün 0 {triggerDay0Display})
+                    </span>
                   </span>
                   <span className={`${echoResultColor} shrink-0`}>
                     <span className="text-gray-500">{card.echo}:</span>{' '}
                     {echoLabel}
-                    <span className="text-[10px] text-slate-400 ml-1">(EPS: {echoEpsDisplay})</span>
+                    <span className="text-[10px] text-slate-400 ml-1">
+                      (EPS {echoEpsDisplay}, Fiyat gün 0 {echoDay0Display})
+                    </span>
                   </span>
                   <span className={`${item.accurate ? 'text-green-400' : 'text-red-400'} shrink-0`}>
                     {item.accurate ? '✓' : '✗'}
