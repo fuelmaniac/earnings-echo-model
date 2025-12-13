@@ -15,7 +15,7 @@ import { analyzeNews } from "./_lib/newsIntel.js";
  * - KV_REST_API_URL: Vercel KV connection
  * - KV_REST_API_TOKEN: Vercel KV auth token
  * - NEWS_WATCHDOG_CRON_SECRET: (Optional) Secret for authenticating cron calls
- * - NEWS_API_KEY: (Optional) For fetching real news from NewsAPI.org
+ * - FINNHUB_API_KEY: (Required for news) Finnhub API key for fetching general news
  */
 
 const MAJOR_EVENTS_KEY = "major_events";
@@ -23,6 +23,7 @@ const MAX_STORED_EVENTS = 100;
 const IMPORTANCE_THRESHOLD = 50; // Only store events with importance >= 50
 const DAILY_GPT_CAP = 50; // Maximum GPT calls per day to control costs
 const PROCESSED_URLS_KEY = "news:processedUrls"; // Track processed article URLs
+const LAST_MIN_ID_KEY = "news:lastMinId"; // Track last minimum Finnhub news id processed
 
 /**
  * Validates the cron request authentication
@@ -56,39 +57,42 @@ function validateCronAuth(req) {
 }
 
 /**
- * Fetches latest news headlines
- * For MVP, returns sample headlines. In production, integrate with NewsAPI or similar.
+ * Fetches latest news headlines from Finnhub general news
+ * @returns {Promise<Array<{id: number, headline: string, body: string|null, source: string, url: string, publishedAt: string}>>}
  */
 async function fetchLatestNews() {
-  const newsApiKey = process.env.NEWS_API_KEY;
+  const finnhubApiKey = process.env.FINNHUB_API_KEY;
 
-  if (newsApiKey) {
-    // Production: Fetch from NewsAPI
+  if (finnhubApiKey) {
+    // Production: Fetch from Finnhub general news
     try {
       const response = await fetch(
-        `https://newsapi.org/v2/top-headlines?category=business&language=en&pageSize=10&apiKey=${newsApiKey}`
+        `https://finnhub.io/api/v1/news?category=general&token=${finnhubApiKey}`
       );
 
       if (!response.ok) {
-        console.error('NewsAPI error:', response.status);
+        console.error('Finnhub API error:', response.status);
         return [];
       }
 
       const data = await response.json();
-      return (data.articles || []).map(article => ({
-        headline: article.title,
-        body: article.description || null,
-        source: article.source?.name || 'Unknown',
-        url: article.url,
-        publishedAt: article.publishedAt
+
+      // Finnhub returns array of news items with id, headline, summary, source, url, datetime
+      return (data || []).map(item => ({
+        id: item.id,
+        headline: item.headline,
+        body: item.summary || null,
+        source: item.source || 'Unknown',
+        url: item.url,
+        publishedAt: item.datetime ? new Date(item.datetime * 1000).toISOString() : new Date().toISOString()
       }));
     } catch (error) {
-      console.error('Failed to fetch from NewsAPI:', error);
+      console.error('Failed to fetch from Finnhub:', error);
       return [];
     }
   }
 
-  // MVP fallback: Return empty (manual testing via POST)
+  // No API key: Return empty (manual testing via POST)
   return [];
 }
 
@@ -124,6 +128,23 @@ async function incrementDailyGptCount() {
 async function getProcessedUrls() {
   const urls = await kv.get(PROCESSED_URLS_KEY);
   return new Set(urls || []);
+}
+
+/**
+ * Gets the last minimum Finnhub news id that was processed
+ * @returns {Promise<number>}
+ */
+async function getLastMinId() {
+  const lastMinId = await kv.get(LAST_MIN_ID_KEY);
+  return lastMinId || 0;
+}
+
+/**
+ * Updates the last minimum Finnhub news id
+ * @param {number} minId - The new minimum id to store
+ */
+async function setLastMinId(minId) {
+  await kv.set(LAST_MIN_ID_KEY, minId);
 }
 
 /**
@@ -209,15 +230,17 @@ export default async function handler(req, res) {
     // Gather diagnostic info
     const dailyCountBefore = await getDailyGptCount();
     const processedUrls = await getProcessedUrls();
-    const newsApiConfigured = !!process.env.NEWS_API_KEY;
+    const lastMinId = await getLastMinId();
+    const finnhubConfigured = !!process.env.FINNHUB_API_KEY;
 
     // Diagnostic info to include in response
     const diagnostics = {
       dailyCountBefore,
       dailyCap: DAILY_GPT_CAP,
       threshold: IMPORTANCE_THRESHOLD,
-      newsApiConfigured,
-      processedUrlsCount: processedUrls.size
+      finnhubConfigured,
+      processedUrlsCount: processedUrls.size,
+      lastMinId
     };
 
     let newsItems = [];
@@ -228,6 +251,7 @@ export default async function handler(req, res) {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
       if (body.headline) {
         newsItems = [{
+          id: body.id || Date.now(), // Use provided id or generate one
           headline: body.headline,
           body: body.body || null,
           source: body.source || 'Manual Test',
@@ -237,16 +261,24 @@ export default async function handler(req, res) {
         newsSource = 'manual';
       }
     } else {
-      // GET request: Fetch news automatically
+      // GET request: Fetch news automatically from Finnhub
       newsItems = await fetchLatestNews();
-      newsSource = newsApiConfigured ? 'newsapi' : 'none';
+      newsSource = finnhubConfigured ? 'finnhub' : 'none';
     }
 
     diagnostics.newsSource = newsSource;
     diagnostics.rawNewsCount = newsItems.length;
 
-    // Filter out already-processed URLs
-    const newItems = newsItems.filter(item => !processedUrls.has(item.url));
+    // Filter out already-processed items:
+    // - For Finnhub: filter by id > lastMinId
+    // - Also filter by URL for backwards compatibility
+    const newItems = newsItems.filter(item => {
+      // Skip if URL already processed
+      if (processedUrls.has(item.url)) return false;
+      // Skip if id <= lastMinId (already processed in previous runs)
+      if (item.id && item.id <= lastMinId) return false;
+      return true;
+    });
     diagnostics.newItemsCount = newItems.length;
     diagnostics.skippedDuplicates = newsItems.length - newItems.length;
 
@@ -333,6 +365,15 @@ export default async function handler(req, res) {
     // Get updated daily count
     const dailyCountAfter = await getDailyGptCount();
     diagnostics.dailyCountAfter = dailyCountAfter;
+
+    // Update lastMinId to the maximum id we processed (for Finnhub deduplication)
+    if (newItems.length > 0) {
+      const maxId = Math.max(...newItems.map(item => item.id || 0));
+      if (maxId > lastMinId) {
+        await setLastMinId(maxId);
+        diagnostics.newLastMinId = maxId;
+      }
+    }
 
     return res.status(200).json({
       success: true,

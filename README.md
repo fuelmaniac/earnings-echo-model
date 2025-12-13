@@ -46,6 +46,18 @@ Get your free API key at [Finnhub.io](https://finnhub.io/)
 
 **Note:** Demo mode works without API key for testing.
 
+### Server-Side Environment Variables (Vercel)
+
+For the News Watchdog cron endpoint (`/api/news-watchdog`), configure these in Vercel:
+
+```env
+FINNHUB_API_KEY=your_finnhub_api_key   # Required for news fetching
+OPENAI_API_KEY=your_openai_api_key     # Required for GPT analysis
+KV_REST_API_URL=your_vercel_kv_url     # Required for state storage
+KV_REST_API_TOKEN=your_vercel_kv_token # Required for state storage
+NEWS_WATCHDOG_CRON_SECRET=your_secret  # Optional: Auth for cron calls
+```
+
 ## 📱 Features
 
 - ✅ Real-time stock price updates
