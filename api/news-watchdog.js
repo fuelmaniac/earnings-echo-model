@@ -21,6 +21,8 @@ import { analyzeNews } from "./_lib/newsIntel.js";
 const MAJOR_EVENTS_KEY = "major_events";
 const MAX_STORED_EVENTS = 100;
 const IMPORTANCE_THRESHOLD = 50; // Only store events with importance >= 50
+const DAILY_GPT_CAP = 50; // Maximum GPT calls per day to control costs
+const PROCESSED_URLS_KEY = "news:processedUrls"; // Track processed article URLs
 
 /**
  * Validates the cron request authentication
@@ -91,6 +93,56 @@ async function fetchLatestNews() {
 }
 
 /**
+ * Gets today's date string in YYYY-MM-DD format
+ */
+function getTodayDateString() {
+  return new Date().toISOString().split('T')[0];
+}
+
+/**
+ * Gets the daily GPT call count for today
+ */
+async function getDailyGptCount() {
+  const key = `news:dailyCount:${getTodayDateString()}`;
+  const count = await kv.get(key);
+  return count || 0;
+}
+
+/**
+ * Increments the daily GPT call count
+ */
+async function incrementDailyGptCount() {
+  const key = `news:dailyCount:${getTodayDateString()}`;
+  const count = await kv.get(key) || 0;
+  await kv.set(key, count + 1, { ex: 86400 * 2 }); // Expire after 2 days
+  return count + 1;
+}
+
+/**
+ * Gets processed URLs set (last 1000 URLs)
+ */
+async function getProcessedUrls() {
+  const urls = await kv.get(PROCESSED_URLS_KEY);
+  return new Set(urls || []);
+}
+
+/**
+ * Marks a URL as processed
+ */
+async function markUrlProcessed(url) {
+  if (!url) return;
+  let urls = await kv.get(PROCESSED_URLS_KEY) || [];
+  if (!urls.includes(url)) {
+    urls.unshift(url);
+    // Keep only last 1000 URLs
+    if (urls.length > 1000) {
+      urls = urls.slice(0, 1000);
+    }
+    await kv.set(PROCESSED_URLS_KEY, urls);
+  }
+}
+
+/**
  * Stores a major event in Vercel KV
  */
 async function storeMajorEvent(event) {
@@ -154,7 +206,22 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Gather diagnostic info
+    const dailyCountBefore = await getDailyGptCount();
+    const processedUrls = await getProcessedUrls();
+    const newsApiConfigured = !!process.env.NEWS_API_KEY;
+
+    // Diagnostic info to include in response
+    const diagnostics = {
+      dailyCountBefore,
+      dailyCap: DAILY_GPT_CAP,
+      threshold: IMPORTANCE_THRESHOLD,
+      newsApiConfigured,
+      processedUrlsCount: processedUrls.size
+    };
+
     let newsItems = [];
+    let newsSource = 'none';
 
     // For POST requests, allow manual news injection for testing
     if (req.method === 'POST' && req.body) {
@@ -164,21 +231,45 @@ export default async function handler(req, res) {
           headline: body.headline,
           body: body.body || null,
           source: body.source || 'Manual Test',
-          url: body.url || null,
+          url: body.url || `manual:${Date.now()}`, // Generate unique URL for manual tests
           publishedAt: new Date().toISOString()
         }];
+        newsSource = 'manual';
       }
     } else {
       // GET request: Fetch news automatically
       newsItems = await fetchLatestNews();
+      newsSource = newsApiConfigured ? 'newsapi' : 'none';
     }
 
-    if (newsItems.length === 0) {
+    diagnostics.newsSource = newsSource;
+    diagnostics.rawNewsCount = newsItems.length;
+
+    // Filter out already-processed URLs
+    const newItems = newsItems.filter(item => !processedUrls.has(item.url));
+    diagnostics.newItemsCount = newItems.length;
+    diagnostics.skippedDuplicates = newsItems.length - newItems.length;
+
+    if (newItems.length === 0) {
       return res.status(200).json({
         success: true,
-        message: 'No news items to process',
+        message: newsItems.length === 0
+          ? 'No news items to process'
+          : 'All news items already processed',
         processed: 0,
-        majorEvents: 0
+        majorEvents: 0,
+        diagnostics
+      });
+    }
+
+    // Check daily cap
+    if (dailyCountBefore >= DAILY_GPT_CAP) {
+      return res.status(200).json({
+        success: true,
+        message: `Daily GPT cap reached (${dailyCountBefore}/${DAILY_GPT_CAP})`,
+        processed: 0,
+        majorEvents: 0,
+        diagnostics
       });
     }
 
@@ -189,13 +280,26 @@ export default async function handler(req, res) {
       events: []
     };
 
-    // Process each news item
-    for (const item of newsItems) {
+    // Process each news item (respecting daily cap)
+    for (const item of newItems) {
+      // Check if we've hit the daily cap
+      const currentCount = await getDailyGptCount();
+      if (currentCount >= DAILY_GPT_CAP) {
+        console.log(`Daily GPT cap reached (${currentCount}/${DAILY_GPT_CAP}), stopping processing`);
+        break;
+      }
+
       try {
         results.processed++;
 
+        // Increment daily count before GPT call
+        await incrementDailyGptCount();
+
         // Analyze with GPT
         const analysis = await analyzeNews(item.headline, item.body);
+
+        // Mark URL as processed
+        await markUrlProcessed(item.url);
 
         // Check if it's a major event worth storing
         if (analysis.importanceScore >= IMPORTANCE_THRESHOLD) {
@@ -221,13 +325,20 @@ export default async function handler(req, res) {
       } catch (itemError) {
         console.error('Error processing news item:', item.headline, itemError);
         results.errors++;
+        // Still mark as processed to avoid retrying failed items
+        await markUrlProcessed(item.url);
       }
     }
+
+    // Get updated daily count
+    const dailyCountAfter = await getDailyGptCount();
+    diagnostics.dailyCountAfter = dailyCountAfter;
 
     return res.status(200).json({
       success: true,
       timestamp: new Date().toISOString(),
-      ...results
+      ...results,
+      diagnostics
     });
 
   } catch (error) {
