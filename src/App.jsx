@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useStockQuote } from './hooks/useStockQuote'
 import { useEarningsInfo } from './hooks/useEarningsInfo'
 import NewsIntelPanel from './components/NewsIntelPanel'
+import MajorEventsPanel from './components/MajorEventsPanel'
 import PATTERN_HISTORY from './data/pattern-history.json'
 
 // Signal card data with sector information
@@ -792,6 +793,9 @@ function App() {
 
         {/* News Intelligence Panel */}
         <NewsIntelPanel />
+
+        {/* Major Events Feed */}
+        <MajorEventsPanel />
 
         {/* Signal Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
