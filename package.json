@@ -10,6 +10,7 @@
     "calculate:history": "node scripts/calculate-pattern-history.js"
   },
   "dependencies": {
+    "@vercel/kv": "^2.0.0",
     "axios": "^1.13.2",
     "openai": "^4.73.0",
     "react": "^18.2.0",
