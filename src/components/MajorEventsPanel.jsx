@@ -254,6 +254,81 @@ function MajorEventsPanel() {
     }
   }
 
+  // Render echo context section
+  const renderEchoContext = (echoContext) => {
+    if (!echoContext) return null
+
+    const alignmentColors = {
+      tailwind: 'bg-green-500/20 text-green-400 border-green-500/50',
+      headwind: 'bg-red-500/20 text-red-400 border-red-500/50',
+      neutral: 'bg-gray-500/20 text-gray-400 border-gray-500/50'
+    }
+    const alignmentLabels = {
+      tailwind: 'Tailwind',
+      headwind: 'Headwind',
+      neutral: 'Neutral'
+    }
+
+    const { stats } = echoContext
+
+    return (
+      <div className="mb-3 p-2 bg-purple-900/20 border border-purple-500/30 rounded-lg">
+        {/* Echo Context Header */}
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs font-semibold text-purple-300">Earnings Echo Context</span>
+          <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${alignmentColors[echoContext.alignment]}`}>
+            {alignmentLabels[echoContext.alignment]}
+          </span>
+        </div>
+
+        {/* Pair info */}
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-xs text-gray-400">Pair:</span>
+          <span className="text-xs font-medium text-white">
+            {echoContext.trigger} <span className="text-purple-400">→</span> {echoContext.echo}
+          </span>
+        </div>
+
+        {/* Stats row */}
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs mb-1.5">
+          {stats.accuracy !== undefined && (
+            <span className="text-gray-400">
+              Accuracy: <span className={stats.accuracy >= 70 ? 'text-green-400' : stats.accuracy >= 50 ? 'text-yellow-400' : 'text-gray-400'}>{stats.accuracy}%</span>
+            </span>
+          )}
+          {stats.correlation !== null && stats.correlation !== undefined && (
+            <span className="text-gray-400">
+              Corr: <span className={Math.abs(stats.correlation) >= 0.3 ? 'text-blue-400' : 'text-gray-400'}>{stats.correlation.toFixed(2)}</span>
+            </span>
+          )}
+          {stats.avgEchoMove !== null && stats.avgEchoMove !== undefined && (
+            <span className="text-gray-400">
+              Avg Move: <span className={stats.avgEchoMove >= 0 ? 'text-green-400' : 'text-red-400'}>{stats.avgEchoMove > 0 ? '+' : ''}{stats.avgEchoMove.toFixed(1)}%</span>
+            </span>
+          )}
+          {stats.sampleSize !== undefined && (
+            <span className="text-gray-400">
+              n={stats.sampleSize}
+            </span>
+          )}
+          {stats.directionAgreement !== undefined && (
+            <span className="text-gray-400">
+              Dir. Agr: <span className={stats.directionAgreement >= 70 ? 'text-green-400' : 'text-gray-400'}>{stats.directionAgreement}%</span>
+            </span>
+          )}
+          {stats.avgGapDays !== null && stats.avgGapDays !== undefined && (
+            <span className="text-gray-400">
+              Gap: {stats.avgGapDays}d
+            </span>
+          )}
+        </div>
+
+        {/* Note */}
+        <p className="text-xs text-gray-500 italic">{echoContext.note}</p>
+      </div>
+    )
+  }
+
   // Render trade signal display
   const renderTradeSignal = (signal) => {
     const actionColors = {
@@ -274,6 +349,7 @@ function MajorEventsPanel() {
             </span>
             <span className="text-xs text-gray-400">
               Confidence: <span className={signal.confidence >= 70 ? 'text-green-400' : signal.confidence >= 50 ? 'text-yellow-400' : 'text-gray-400'}>{signal.confidence}%</span>
+              {signal.echoContext && <span className="text-purple-400 ml-1">(calibrated)</span>}
             </span>
             <span className="text-xs text-gray-500">
               {horizonLabels[signal.horizon]}
@@ -283,6 +359,9 @@ function MajorEventsPanel() {
             <span className="text-xs text-gray-600">(cached)</span>
           )}
         </div>
+
+        {/* Echo Context Section */}
+        {renderEchoContext(signal.echoContext)}
 
         {/* One-liner */}
         <p className="text-xs text-white mb-2 font-medium">{signal.oneLiner}</p>
