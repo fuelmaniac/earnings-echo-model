@@ -2,9 +2,97 @@ import OpenAI from "openai";
 import { buildEchoContext } from "./echoContext.js";
 
 /**
- * System prompt for GPT-5.1 trade signal generation
+ * System prompt for GPT-5.1 trade signal generation - Phase 3.3
+ * Updated to return structured JSON for confidence engine
  */
 export const TRADE_SIGNAL_SYSTEM_PROMPT = `You are a fast macro trading analyst for a professional trading assistant.
+Your job is to generate a structured trade signal based on a major news event and its analysis.
+
+CRITICAL: Return ONLY valid JSON. No markdown, no code blocks, no explanations.
+
+OUTPUT SCHEMA (all fields required):
+
+{
+  "thesis": "1-2 sentence trade thesis explaining the opportunity",
+  "direction": "LONG" | "SHORT" | "NONE",
+  "instrument": "STOCK" | "OPTIONS" | "NO_TRADE",
+  "timeHorizon": "INTRADAY" | "SWING" | "MULTI_DAY",
+  "entry": {
+    "type": "market" | "limit" | "wait",
+    "level": 0
+  },
+  "invalidation": {
+    "level": 0,
+    "reason": "brief explanation"
+  },
+  "targets": [
+    { "level": 0, "reason": "brief explanation" }
+  ],
+  "ambiguity": 0.0,
+  "hedged": false,
+  "tickers": ["TICKER1", "TICKER2"],
+  "keyRisks": ["risk1", "risk2"]
+}
+
+GUIDELINES:
+
+1. DIRECTION:
+   - "LONG" = Buy exposure to assets that benefit
+   - "SHORT" = Sell/short assets that will be hurt
+   - "NONE" = Too uncertain, noisy, or already priced in
+
+2. TICKERS:
+   - Provide 3-8 tickers or ETFs
+   - ONLY use large, liquid, well-known US or global names
+   - Prefer major ETFs when sector-wide: SPY, QQQ, XLE, XLF, XLK, XLV, XLI, XLU, XLP, XLY, XLB, XLRE, GLD, SLV, TLT, HYG, EEM, EFA, VWO, USO, UNG, DBA
+   - For individual stocks, only use mega-caps: AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA, JPM, GS, XOM, CVX, BA, CAT, etc.
+   - NEVER invent obscure or illiquid tickers
+
+3. AMBIGUITY (0.0 to 1.0):
+   - 0.0 = Very clear, unambiguous event with obvious implications
+   - 0.5 = Moderate uncertainty, some conflicting factors
+   - 1.0 = Highly ambiguous, unclear implications
+
+4. HEDGED (boolean):
+   - true if you find yourself using words like "might", "could", "possibly", "if"
+   - true if thesis has significant caveats
+   - false if you have conviction
+
+5. ENTRY:
+   - type "market" = enter immediately
+   - type "limit" = enter at specific level
+   - type "wait" = wait for pullback/setup
+   - level = 0 if market entry, otherwise specific price
+
+6. INVALIDATION:
+   - level = price at which thesis is invalidated
+   - reason = brief explanation why
+
+7. TARGETS (0-2 targets):
+   - level = target price
+   - reason = brief explanation
+
+8. TIME HORIZON:
+   - "INTRADAY" = same day
+   - "SWING" = 1-5 days
+   - "MULTI_DAY" = 1-3 weeks
+
+9. INSTRUMENT:
+   - "STOCK" for equity exposure
+   - "OPTIONS" if leveraged play makes sense
+   - "NO_TRADE" if direction is NONE
+
+10. KEY_RISKS:
+    - 2-4 short bullet points of key risks
+    - Each max 80 characters
+
+If uncertain, set ambiguity HIGH and prefer entry.type="wait" or direction="NONE".
+Do NOT compute confidence scores - that is handled by the system.`;
+
+/**
+ * Legacy system prompt kept for reference
+ */
+export const TRADE_SIGNAL_SYSTEM_PROMPT_LEGACY = `You are a fast macro trading analyst for a professional trading assistant.
 Your job is to generate a concise trade signal based on a major news event and its analysis.
 
 IMPORTANT GUIDELINES:
@@ -47,22 +135,68 @@ IMPORTANT GUIDELINES:
 Output must be valid JSON matching the exact schema provided.`;
 
 /**
- * Schema reminder for the user prompt
+ * Schema for new Phase 3.3 output format
  */
 export const OUTPUT_SCHEMA = {
-  action: "long | short | avoid",
-  targets: ["string (3-8 tickers/ETFs)"],
-  horizon: "very_short | short | medium",
-  confidence: "number (0-100 integer)",
-  oneLiner: "string (max 100 chars)",
-  rationale: ["string (2-4 bullets, max 80 chars each)"],
+  thesis: "string (1-2 sentences)",
+  direction: "LONG | SHORT | NONE",
+  instrument: "STOCK | OPTIONS | NO_TRADE",
+  timeHorizon: "INTRADAY | SWING | MULTI_DAY",
+  entry: { type: "market | limit | wait", level: "number" },
+  invalidation: { level: "number", reason: "string" },
+  targets: [{ level: "number", reason: "string" }],
+  ambiguity: "number (0.0-1.0)",
+  hedged: "boolean",
+  tickers: ["string (3-8 tickers/ETFs)"],
   keyRisks: ["string (2-4 bullets, max 80 chars each)"]
 };
 
 /**
- * Validates the trade signal response from GPT
+ * Validates the new Phase 3.3 trade signal response from GPT
  */
 export function validateTradeSignal(data) {
+  if (typeof data !== 'object' || data === null) {
+    return false;
+  }
+
+  // Check direction
+  if (!['LONG', 'SHORT', 'NONE'].includes(data.direction)) return false;
+
+  // Check thesis
+  if (typeof data.thesis !== 'string' || data.thesis.length === 0) return false;
+
+  // Check instrument
+  if (!['STOCK', 'OPTIONS', 'NO_TRADE'].includes(data.instrument)) return false;
+
+  // Check timeHorizon
+  if (!['INTRADAY', 'SWING', 'MULTI_DAY'].includes(data.timeHorizon)) return false;
+
+  // Check tickers
+  if (!Array.isArray(data.tickers)) return false;
+  if (data.tickers.length < 1 || data.tickers.length > 8) return false;
+
+  // Check ambiguity
+  if (typeof data.ambiguity !== 'number') return false;
+  if (data.ambiguity < 0 || data.ambiguity > 1) return false;
+
+  // Check hedged
+  if (typeof data.hedged !== 'boolean') return false;
+
+  // Check entry (optional structure validation)
+  if (data.entry && typeof data.entry === 'object') {
+    if (!['market', 'limit', 'wait'].includes(data.entry.type)) return false;
+  }
+
+  // Check keyRisks (allow empty in edge cases)
+  if (!Array.isArray(data.keyRisks)) return false;
+
+  return true;
+}
+
+/**
+ * Validates legacy format (for backward compatibility)
+ */
+export function validateLegacyTradeSignal(data) {
   if (typeof data !== 'object' || data === null) {
     return false;
   }
@@ -96,7 +230,38 @@ export function validateTradeSignal(data) {
 }
 
 /**
- * Normalizes the trade signal response
+ * Normalizes the new Phase 3.3 LLM response
+ * Returns the raw LLM output in normalized form for confidence engine
+ * @param {object} data - Raw signal data from GPT
+ * @returns {object} - Normalized LLM output
+ */
+export function normalizeLLMOutput(data) {
+  return {
+    thesis: String(data.thesis || '').slice(0, 300),
+    direction: data.direction || 'NONE',
+    instrument: data.instrument || 'NO_TRADE',
+    timeHorizon: data.timeHorizon || 'SWING',
+    entry: {
+      type: data.entry?.type || 'market',
+      level: Number(data.entry?.level) || 0
+    },
+    invalidation: {
+      level: Number(data.invalidation?.level) || 0,
+      reason: String(data.invalidation?.reason || '').slice(0, 150)
+    },
+    targets: (data.targets || []).map(t => ({
+      level: Number(t?.level) || 0,
+      reason: String(t?.reason || '').slice(0, 100)
+    })).slice(0, 2),
+    ambiguity: Math.max(0, Math.min(1, Number(data.ambiguity) || 0.3)),
+    hedged: Boolean(data.hedged),
+    tickers: (data.tickers || []).map(t => String(t).toUpperCase()).slice(0, 8),
+    keyRisks: (data.keyRisks || []).map(r => String(r).slice(0, 120)).slice(0, 4)
+  };
+}
+
+/**
+ * Legacy normalizer for backward compatibility
  * @param {object} data - Raw signal data from GPT
  * @param {string} eventId - Event ID
  * @param {object|null} echoContext - Optional echo context for calibration
@@ -128,6 +293,95 @@ export function normalizeTradeSignal(data, eventId, echoContext = null) {
 
 /**
  * Generates a trade signal for a major event using GPT-5.1
+ * Returns the raw LLM output for the confidence engine
+ * @param {object} event - The major event object with headline, body, and analysis
+ * @returns {Promise<object>} - The normalized LLM output
+ */
+export async function generateLLMSignal(event) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY is not configured');
+  }
+
+  // Build context from the event
+  const userContent = {
+    event: {
+      headline: event.headline,
+      body: event.body || null,
+      publishedAt: event.publishedAt
+    },
+    analysis: {
+      summary: event.analysis?.summary,
+      importanceScore: event.analysis?.importanceScore,
+      importanceCategory: event.analysis?.importanceCategory,
+      impactHorizon: event.analysis?.impactHorizon,
+      sectors: event.analysis?.sectors?.map(s => ({
+        name: s.name,
+        direction: s.direction,
+        rationale: s.rationale,
+        exampleTickers: s.exampleTickers,
+        confidence: s.confidence
+      })) || [],
+      riskNotes: event.analysis?.riskNotes || []
+    },
+    instructions: "Generate a structured trade signal for this macro event. Be conservative. Return ONLY valid JSON.",
+    outputSchema: OUTPUT_SCHEMA
+  };
+
+  // Initialize OpenAI client
+  const client = new OpenAI({ apiKey });
+
+  // Call GPT-5.1 with retry logic for JSON parsing
+  let parsedResponse = null;
+  let lastError = null;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const completion = await client.chat.completions.create({
+        model: "gpt-5.1",
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: TRADE_SIGNAL_SYSTEM_PROMPT },
+          { role: "user", content: JSON.stringify(userContent) }
+        ]
+      });
+
+      const responseContent = completion.choices?.[0]?.message?.content;
+
+      if (!responseContent) {
+        throw new Error('Empty response from model');
+      }
+
+      // Parse JSON response
+      parsedResponse = JSON.parse(responseContent);
+
+      // Validate response structure
+      if (!validateTradeSignal(parsedResponse)) {
+        throw new Error('Invalid trade signal structure');
+      }
+
+      break; // Success
+    } catch (err) {
+      lastError = err;
+      console.warn(`LLM signal attempt ${attempt + 1} failed:`, err.message);
+
+      if (attempt === 0) {
+        // Add fix instruction for retry
+        userContent.instructions = "CRITICAL: Return ONLY valid JSON with all required fields. Previous attempt failed. " + userContent.instructions;
+      }
+    }
+  }
+
+  if (!parsedResponse) {
+    throw lastError || new Error('Failed to generate LLM signal');
+  }
+
+  // Normalize and return
+  return normalizeLLMOutput(parsedResponse);
+}
+
+/**
+ * Legacy: Generates a trade signal for a major event using GPT-5.1
  * @param {object} event - The major event object with headline, body, and analysis
  * @param {string} eventId - The event ID
  * @returns {Promise<object>} - The generated trade signal
@@ -171,7 +425,7 @@ export async function generateTradeSignal(event, eventId) {
     model: "gpt-5.1",
     response_format: { type: "json_object" },
     messages: [
-      { role: "system", content: TRADE_SIGNAL_SYSTEM_PROMPT },
+      { role: "system", content: TRADE_SIGNAL_SYSTEM_PROMPT_LEGACY },
       { role: "user", content: JSON.stringify(userContent) }
     ]
   });
@@ -194,7 +448,7 @@ export async function generateTradeSignal(event, eventId) {
   }
 
   // Validate response structure
-  if (!validateTradeSignal(parsedResponse)) {
+  if (!validateLegacyTradeSignal(parsedResponse)) {
     console.error('Invalid trade signal structure from model');
     console.error('Parsed response:', JSON.stringify(parsedResponse, null, 2));
     throw new Error('Invalid trade signal structure from model');

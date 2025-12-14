@@ -329,30 +329,99 @@ function MajorEventsPanel() {
     )
   }
 
-  // Render trade signal display
-  const renderTradeSignal = (signal) => {
-    const actionColors = {
-      long: 'bg-green-500/20 text-green-400 border-green-500/50',
-      short: 'bg-red-500/20 text-red-400 border-red-500/50',
-      avoid: 'bg-gray-500/20 text-gray-400 border-gray-500/50'
+  // Helper to render confidence component bar
+  const renderComponentBar = (label, score) => {
+    const getColor = (s) => {
+      if (s >= 70) return 'bg-green-500'
+      if (s >= 50) return 'bg-yellow-500'
+      return 'bg-red-500'
     }
-    const actionLabels = { long: 'LONG', short: 'SHORT', avoid: 'AVOID' }
-    const horizonLabels = { very_short: '1-2 days', short: '1-2 weeks', medium: '1-3 months' }
+    return (
+      <div className="flex items-center gap-2 text-xs">
+        <span className="text-gray-400 w-20 truncate">{label}</span>
+        <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+          <div
+            className={`h-full ${getColor(score)} transition-all`}
+            style={{ width: `${Math.min(100, score)}%` }}
+          />
+        </div>
+        <span className={`w-8 text-right ${score >= 70 ? 'text-green-400' : score >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+          {score}
+        </span>
+      </div>
+    )
+  }
+
+  // Render trade signal display - Phase 3.3 format
+  const renderTradeSignal = (signal) => {
+    // Handle error responses
+    if (signal.ok === false) {
+      return (
+        <div className="mt-3 pt-3 border-t border-gray-600/50">
+          <div className="p-2 bg-red-500/10 border border-red-500/30 rounded">
+            <p className="text-xs text-red-400">{signal.message || signal.error || 'Failed to generate signal'}</p>
+          </div>
+        </div>
+      )
+    }
+
+    // New signal type colors
+    const signalColors = {
+      BUY: 'bg-green-500/20 text-green-400 border-green-500/50',
+      SELL: 'bg-red-500/20 text-red-400 border-red-500/50',
+      AVOID: 'bg-gray-500/20 text-gray-400 border-gray-500/50',
+      WAIT: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50'
+    }
+
+    // Grade colors
+    const gradeColors = {
+      A: 'text-green-400',
+      B: 'text-blue-400',
+      C: 'text-yellow-400',
+      D: 'text-red-400'
+    }
+
+    const horizonLabels = {
+      INTRADAY: 'Intraday',
+      SWING: '1-5 days',
+      MULTI_DAY: '1-3 weeks',
+      // Legacy
+      very_short: '1-2 days',
+      short: '1-2 weeks',
+      medium: '1-3 months'
+    }
+
+    // Support both new and legacy formats
+    const signalType = signal.signal || (signal.action?.toUpperCase() === 'LONG' ? 'BUY' : signal.action?.toUpperCase() === 'SHORT' ? 'SELL' : 'AVOID')
+    const confidence = signal.confidence || {}
+    const overall = confidence.overall ?? signal.confidence ?? 0
+    const grade = confidence.grade || (overall >= 85 ? 'A' : overall >= 70 ? 'B' : overall >= 55 ? 'C' : 'D')
+    const components = confidence.components || {}
+    const thesis = signal.setup?.thesis || signal.oneLiner || ''
+    const timeHorizon = signal.setup?.timeHorizon || signal.horizon || 'SWING'
+    const sizingHint = signal.sizingHint || {}
+    const explain = signal.explain || []
+    const targets = signal.targets || []
+    const keyRisks = signal.keyRisks || []
+
+    const isAvoidOrWait = signalType === 'AVOID' || signalType === 'WAIT'
 
     return (
       <div className="mt-3 pt-3 border-t border-gray-600/50">
-        {/* Signal Header */}
+        {/* Signal Header with Grade */}
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <span className={`text-xs px-2 py-0.5 rounded border font-bold ${actionColors[signal.action]}`}>
-              {actionLabels[signal.action]}
+            <span className={`text-xs px-2 py-0.5 rounded border font-bold ${signalColors[signalType] || signalColors.AVOID}`}>
+              {signalType}
+            </span>
+            <span className={`text-sm font-bold ${gradeColors[grade]}`}>
+              {grade}
             </span>
             <span className="text-xs text-gray-400">
-              Confidence: <span className={signal.confidence >= 70 ? 'text-green-400' : signal.confidence >= 50 ? 'text-yellow-400' : 'text-gray-400'}>{signal.confidence}%</span>
-              {signal.echoContext && <span className="text-purple-400 ml-1">(calibrated)</span>}
+              {overall}%
             </span>
             <span className="text-xs text-gray-500">
-              {horizonLabels[signal.horizon]}
+              {horizonLabels[timeHorizon] || timeHorizon}
             </span>
           </div>
           {signal.cached && (
@@ -363,37 +432,107 @@ function MajorEventsPanel() {
         {/* Echo Context Section */}
         {renderEchoContext(signal.echoContext)}
 
-        {/* One-liner */}
-        <p className="text-xs text-white mb-2 font-medium">{signal.oneLiner}</p>
+        {/* Thesis */}
+        <p className="text-xs text-white mb-2 font-medium">{thesis}</p>
 
-        {/* Targets */}
-        <div className="flex flex-wrap gap-1 mb-2">
-          {signal.targets.map((ticker, idx) => (
-            <span key={idx} className="text-xs px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded border border-blue-500/30">
-              {ticker}
-            </span>
-          ))}
-        </div>
+        {/* Confidence Breakdown */}
+        {Object.keys(components).length > 0 && (
+          <div className="mb-3 p-2 bg-gray-800/50 rounded border border-gray-700/50">
+            <p className="text-xs text-gray-500 mb-1.5 font-medium">Confidence Breakdown</p>
+            <div className="space-y-1">
+              {components.echoEdge !== undefined && renderComponentBar('Echo Edge', components.echoEdge)}
+              {components.eventClarity !== undefined && renderComponentBar('Clarity', components.eventClarity)}
+              {components.regimeVol !== undefined && renderComponentBar('Vol Regime', components.regimeVol)}
+              {components.gapRisk !== undefined && renderComponentBar('Gap Risk', components.gapRisk)}
+              {components.freshness !== undefined && renderComponentBar('Freshness', components.freshness)}
+            </div>
+            {/* Notes */}
+            {confidence.notes && confidence.notes.length > 0 && (
+              <div className="mt-2 pt-1.5 border-t border-gray-700/50">
+                {confidence.notes.slice(0, 3).map((note, idx) => (
+                  <p key={idx} className="text-xs text-gray-500 italic">• {note}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
-        {/* Rationale and Risks in columns */}
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          {/* Rationale */}
-          <div>
-            <p className="text-gray-500 mb-1 font-medium">Rationale:</p>
+        {/* Sizing Hint - only show for BUY/SELL */}
+        {!isAvoidOrWait && sizingHint.suggestedPositionPct !== undefined && (
+          <div className="mb-2 p-2 bg-blue-900/20 rounded border border-blue-500/30">
+            <p className="text-xs text-blue-300 mb-1 font-medium">Position Sizing</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
+              <span className="text-gray-400">
+                Risk: <span className="text-blue-300">{sizingHint.riskPerTradePct}%</span>
+              </span>
+              <span className="text-gray-400">
+                Size: <span className="text-blue-300">{sizingHint.suggestedPositionPct}%</span>
+              </span>
+              <span className="text-gray-400">
+                Stop: <span className="text-blue-300">{sizingHint.stopDistancePct}%</span>
+              </span>
+              {sizingHint.caps?.maxPositionPct && (
+                <span className="text-gray-500">
+                  (max {sizingHint.caps.maxPositionPct}%)
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* AVOID/WAIT Reasons */}
+        {isAvoidOrWait && explain.length > 0 && (
+          <div className="mb-2 p-2 bg-yellow-900/20 rounded border border-yellow-500/30">
+            <p className="text-xs text-yellow-300 mb-1 font-medium">
+              {signalType === 'WAIT' ? 'Wait Conditions' : 'Avoid Reasons'}
+            </p>
             <ul className="space-y-0.5">
-              {signal.rationale.map((item, idx) => (
-                <li key={idx} className="text-gray-400 flex gap-1">
-                  <span className="text-green-400">+</span>
-                  <span className="line-clamp-2">{item}</span>
+              {explain.map((reason, idx) => (
+                <li key={idx} className="text-xs text-gray-400 flex gap-1">
+                  <span className="text-yellow-400">•</span>
+                  <span>{reason}</span>
                 </li>
               ))}
             </ul>
           </div>
-          {/* Risks */}
-          <div>
+        )}
+
+        {/* Entry/Invalidation for BUY/SELL */}
+        {!isAvoidOrWait && signal.setup && (
+          <div className="mb-2 text-xs">
+            {signal.setup.entry?.level > 0 && (
+              <span className="text-gray-400 mr-3">
+                Entry: <span className="text-white">{signal.setup.entry.type} @ ${signal.setup.entry.level.toFixed(2)}</span>
+              </span>
+            )}
+            {signal.setup.invalidation?.level > 0 && (
+              <span className="text-gray-400">
+                Stop: <span className="text-red-400">${signal.setup.invalidation.level.toFixed(2)}</span>
+                {signal.setup.invalidation.reason && (
+                  <span className="text-gray-500 ml-1">({signal.setup.invalidation.reason})</span>
+                )}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Targets */}
+        {targets.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {targets.map((ticker, idx) => (
+              <span key={idx} className="text-xs px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded border border-blue-500/30">
+                {ticker}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Key Risks */}
+        {keyRisks.length > 0 && (
+          <div className="text-xs">
             <p className="text-gray-500 mb-1 font-medium">Key Risks:</p>
             <ul className="space-y-0.5">
-              {signal.keyRisks.map((item, idx) => (
+              {keyRisks.slice(0, 3).map((item, idx) => (
                 <li key={idx} className="text-gray-400 flex gap-1">
                   <span className="text-red-400">!</span>
                   <span className="line-clamp-2">{item}</span>
@@ -401,7 +540,16 @@ function MajorEventsPanel() {
               ))}
             </ul>
           </div>
-        </div>
+        )}
+
+        {/* Meta info */}
+        {signal.meta && (
+          <div className="mt-2 pt-1.5 border-t border-gray-700/30 text-xs text-gray-600 flex gap-3">
+            {signal.meta.echoUsed && <span>Echo ✓</span>}
+            {signal.meta.marketStatsUsed && <span>Market ✓</span>}
+            {signal.meta.modelVersion && <span>v{signal.meta.modelVersion}</span>}
+          </div>
+        )}
       </div>
     )
   }
