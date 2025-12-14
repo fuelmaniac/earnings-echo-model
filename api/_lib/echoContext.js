@@ -1,5 +1,5 @@
 // Static ES import ensures Vercel bundler includes the JSON file
-import patternHistoryData from '../_data/pattern-history.json' assert { type: 'json' };
+import patternHistoryData from '../_data/pattern-history.json' with { type: 'json' };
 
 /**
  * Canonical pairs with their constituent tickers
