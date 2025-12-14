@@ -1,18 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { TRIGGER_BANNER_CHECK_EVENT } from './MajorEventAlertBanner'
-
-// Helper to get badge color based on importance category
-function getImportanceBadgeStyle(category) {
-  switch (category) {
-    case 'macro_shock':
-      return 'bg-red-500/20 text-red-400 border-red-500/40'
-    case 'sector_shock':
-      return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40'
-    case 'noise':
-    default:
-      return 'bg-gray-500/20 text-gray-400 border-gray-500/40'
-  }
-}
+import {
+  getPriorityTier,
+  getTierBadgeStyleFeed,
+  getThemeKey,
+  groupEventsByTheme,
+  getGroupSources,
+  clearAllCooldowns
+} from '../utils/majorEventsUtils'
 
 // Helper to format relative time
 function formatRelativeTime(dateString) {
@@ -31,9 +26,21 @@ function formatRelativeTime(dateString) {
   return date.toLocaleDateString()
 }
 
-// Default test headline for injection
-const DEFAULT_TEST_HEADLINE = "Strait of Hormuz reportedly closed; oil shipments disrupted"
-const DEFAULT_TEST_BODY = "Multiple reports indicate a full closure of the Strait of Hormuz due to escalating regional tensions. Oil tankers are being rerouted, and energy markets are reacting to the supply disruption."
+// Default test headlines for injection (with variations for testing)
+const TEST_HEADLINES = [
+  {
+    headline: "Strait of Hormuz reportedly closed; oil shipments disrupted",
+    body: "Multiple reports indicate a full closure of the Strait of Hormuz due to escalating regional tensions. Oil tankers are being rerouted, and energy markets are reacting to the supply disruption."
+  },
+  {
+    headline: "Strait of Hormuz closure confirmed by officials; crude prices surge",
+    body: "Government officials confirm the Strait of Hormuz closure. Brent crude jumps 8% in early trading as supply concerns mount."
+  },
+  {
+    headline: "Federal Reserve announces emergency rate cut of 50 basis points",
+    body: "In a surprise move, the Federal Reserve has announced an emergency interest rate cut of 50 basis points, citing global economic uncertainty."
+  }
+]
 
 function MajorEventsPanel() {
   const [events, setEvents] = useState([])
@@ -42,6 +49,7 @@ function MajorEventsPanel() {
   const [isExpanded, setIsExpanded] = useState(true)
   const [injecting, setInjecting] = useState(false)
   const [testingBanner, setTestingBanner] = useState(false)
+  const [expandedGroups, setExpandedGroups] = useState(new Set())
 
   // Check if admin mode is enabled via URL query param
   const isAdmin = useMemo(() => {
@@ -49,6 +57,11 @@ function MajorEventsPanel() {
     const params = new URLSearchParams(window.location.search)
     return params.get('admin') === '1'
   }, [])
+
+  // Group events by theme
+  const eventGroups = useMemo(() => {
+    return groupEventsByTheme(events)
+  }, [events])
 
   // Fetch major events
   const fetchEvents = async () => {
@@ -73,8 +86,21 @@ function MajorEventsPanel() {
     fetchEvents()
   }, [])
 
-  // Handle inject test event
-  const handleInjectTestEvent = async () => {
+  // Toggle expanded state for a group
+  const toggleGroupExpanded = (themeKey) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(themeKey)) {
+        next.delete(themeKey)
+      } else {
+        next.add(themeKey)
+      }
+      return next
+    })
+  }
+
+  // Handle inject test event (now with variation option)
+  const handleInjectTestEvent = async (variationIndex = 0) => {
     // Prompt for secret
     const secret = prompt('Enter admin secret:')
     if (!secret) {
@@ -83,15 +109,13 @@ function MajorEventsPanel() {
 
     setInjecting(true)
     try {
+      const testData = TEST_HEADLINES[variationIndex % TEST_HEADLINES.length]
       const response = await fetch(`/api/major-events-inject?secret=${encodeURIComponent(secret)}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          headline: DEFAULT_TEST_HEADLINE,
-          body: DEFAULT_TEST_BODY
-        })
+        body: JSON.stringify(testData)
       })
 
       if (!response.ok) {
@@ -123,19 +147,18 @@ function MajorEventsPanel() {
       // Clear localStorage so the banner will show for the new event
       try {
         localStorage.removeItem('lastSeenMajorEventId')
+        clearAllCooldowns()  // Also clear cooldowns for testing
       } catch (err) {
-        console.warn('Failed to clear lastSeenMajorEventId:', err)
+        console.warn('Failed to clear localStorage:', err)
       }
 
+      const testData = TEST_HEADLINES[0]
       const response = await fetch(`/api/major-events-inject?secret=${encodeURIComponent(secret)}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          headline: DEFAULT_TEST_HEADLINE,
-          body: DEFAULT_TEST_BODY
-        })
+        body: JSON.stringify(testData)
       })
 
       if (!response.ok) {
@@ -159,6 +182,93 @@ function MajorEventsPanel() {
     }
   }
 
+  // Render a single event card
+  const renderEventCard = (event, isRepresentative = true, showRelated = null) => {
+    const score = event.analysis?.importanceScore || 0
+    const { label: tierLabel, color: tierColor } = getPriorityTier(score)
+    const themeKey = getThemeKey(event)
+
+    return (
+      <div
+        key={event.id || `event-${event.storedAt}`}
+        data-theme-key={isRepresentative ? themeKey : undefined}
+        className={`p-3 bg-gray-700/40 rounded-lg border border-gray-600/50 hover:border-gray-500/50 transition-all ${
+          isRepresentative ? '' : 'ml-4 opacity-80'
+        }`}
+      >
+        {/* Header row with headline and time */}
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <h3 className="text-sm font-medium text-white leading-tight flex-1">
+            {event.headline}
+          </h3>
+          <span className="text-xs text-gray-500 whitespace-nowrap">
+            {formatRelativeTime(event.storedAt || event.publishedAt)}
+          </span>
+        </div>
+
+        {/* Summary */}
+        {event.analysis?.summary && (
+          <p className="text-xs text-gray-400 mb-2 line-clamp-2">
+            {event.analysis.summary}
+          </p>
+        )}
+
+        {/* Meta badges row */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Priority Tier Badge */}
+          <span className={`text-xs px-2 py-0.5 rounded border font-semibold ${getTierBadgeStyleFeed(tierColor)}`}>
+            {tierLabel}
+          </span>
+
+          {/* Score */}
+          <span className="text-xs text-gray-500">
+            {score}/100
+          </span>
+
+          {/* Source */}
+          {event.source && (
+            <span className="text-xs text-gray-500">
+              via {event.source}
+            </span>
+          )}
+
+          {/* Top impacted sectors with arrows */}
+          {event.analysis?.sectors?.slice(0, 2).map((sector, sIdx) => (
+            <span
+              key={sIdx}
+              className={`text-xs ${
+                sector.direction === 'bullish' ? 'text-green-400' :
+                sector.direction === 'bearish' ? 'text-red-400' :
+                'text-gray-400'
+              }`}
+            >
+              {sector.name} {sector.direction === 'bullish' ? '↑' : sector.direction === 'bearish' ? '↓' : '→'}
+            </span>
+          ))}
+        </div>
+
+        {/* Related updates indicator (for representative cards only) */}
+        {showRelated && showRelated.count > 0 && (
+          <button
+            onClick={() => toggleGroupExpanded(showRelated.themeKey)}
+            className="mt-2 pt-2 border-t border-gray-600/50 w-full text-left"
+          >
+            <div className="flex items-center justify-between text-xs text-gray-500 hover:text-gray-400 transition-colors">
+              <span>
+                {expandedGroups.has(showRelated.themeKey) ? '▾' : '▸'} {showRelated.count} more related update{showRelated.count > 1 ? 's' : ''}
+                {showRelated.sources.length > 1 && (
+                  <span className="ml-1 text-gray-600">
+                    ({showRelated.sources.join(', ')})
+                  </span>
+                )}
+              </span>
+            </div>
+          </button>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="bg-gray-800 rounded-xl border border-gray-700 mb-6" data-major-events-panel>
       {/* Header - Always visible */}
@@ -175,7 +285,7 @@ function MajorEventsPanel() {
           <div className="text-left">
             <h2 className="text-lg font-semibold text-white">Major Events Feed</h2>
             <p className="text-xs text-gray-400">
-              {loading ? 'Loading...' : `${events.length} recent events`}
+              {loading ? 'Loading...' : `${eventGroups.length} event group${eventGroups.length !== 1 ? 's' : ''} (${events.length} total)`}
             </p>
           </div>
         </div>
@@ -192,12 +302,12 @@ function MajorEventsPanel() {
       {/* Collapsible Content */}
       {isExpanded && (
         <div className="px-4 pb-4">
-          {/* Admin: Inject Test Event & Test Alert Banner Buttons */}
+          {/* Admin Controls */}
           {isAdmin && (
             <div className="mb-4 pb-4 border-b border-gray-700">
               <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={handleInjectTestEvent}
+                  onClick={() => handleInjectTestEvent(0)}
                   disabled={injecting || testingBanner}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
                     injecting
@@ -218,9 +328,23 @@ function MajorEventsPanel() {
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                       </svg>
-                      Inject Test Event
+                      Inject Event #1
                     </>
                   )}
+                </button>
+                <button
+                  onClick={() => handleInjectTestEvent(1)}
+                  disabled={injecting || testingBanner}
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-orange-700 hover:bg-orange-600 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Inject Similar #2
+                </button>
+                <button
+                  onClick={() => handleInjectTestEvent(2)}
+                  disabled={injecting || testingBanner}
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Inject Different Theme
                 </button>
                 <button
                   onClick={handleTestAlertBanner}
@@ -250,7 +374,7 @@ function MajorEventsPanel() {
                 </button>
               </div>
               <p className="text-xs text-gray-500 mt-2">
-                Admin mode: "Inject Test Event" adds an event. "Test Alert Banner" clears seen state, injects an event, and triggers the banner.
+                Admin mode: Inject similar events to test grouping & cooldown. "Test Alert Banner" clears all state and shows banner.
               </p>
             </div>
           )}
@@ -283,63 +407,37 @@ function MajorEventsPanel() {
             </div>
           )}
 
-          {/* Events List */}
-          {!loading && events.length > 0 && (
+          {/* Grouped Events List */}
+          {!loading && eventGroups.length > 0 && (
             <div className="space-y-3">
-              {events.map((event, index) => (
-                <div
-                  key={event.id || `event-${index}`}
-                  className="p-3 bg-gray-700/40 rounded-lg border border-gray-600/50 hover:border-gray-500/50 transition-colors"
-                >
-                  {/* Headline */}
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <h3 className="text-sm font-medium text-white leading-tight flex-1">
-                      {event.headline}
-                    </h3>
-                    <span className="text-xs text-gray-500 whitespace-nowrap">
-                      {formatRelativeTime(event.storedAt || event.publishedAt)}
-                    </span>
-                  </div>
+              {eventGroups.map((group) => {
+                const sources = getGroupSources(group.events)
+                const isGroupExpanded = expandedGroups.has(group.themeKey)
 
-                  {/* Summary */}
-                  {event.analysis?.summary && (
-                    <p className="text-xs text-gray-400 mb-2 line-clamp-2">
-                      {event.analysis.summary}
-                    </p>
-                  )}
-
-                  {/* Meta badges */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    {/* Importance Score & Category */}
-                    {event.analysis?.importanceCategory && (
-                      <span className={`text-xs px-2 py-0.5 rounded border ${getImportanceBadgeStyle(event.analysis.importanceCategory)}`}>
-                        {event.analysis.importanceScore}/100 • {event.analysis.importanceCategory?.replace('_', ' ')}
-                      </span>
+                return (
+                  <div key={group.themeKey}>
+                    {/* Representative event card */}
+                    {renderEventCard(
+                      group.representative,
+                      true,
+                      group.relatedCount > 0 ? {
+                        count: group.relatedCount,
+                        themeKey: group.themeKey,
+                        sources: sources.filter(s => s !== group.representative.source)
+                      } : null
                     )}
 
-                    {/* Source */}
-                    {event.source && (
-                      <span className="text-xs text-gray-500">
-                        via {event.source}
-                      </span>
+                    {/* Expanded related events */}
+                    {isGroupExpanded && group.relatedCount > 0 && (
+                      <div className="mt-2 space-y-2">
+                        {group.events.slice(1).map((event) => (
+                          renderEventCard(event, false)
+                        ))}
+                      </div>
                     )}
-
-                    {/* Top impacted sectors */}
-                    {event.analysis?.sectors?.slice(0, 2).map((sector, sIdx) => (
-                      <span
-                        key={sIdx}
-                        className={`text-xs ${
-                          sector.direction === 'bullish' ? 'text-green-400' :
-                          sector.direction === 'bearish' ? 'text-red-400' :
-                          'text-gray-400'
-                        }`}
-                      >
-                        {sector.name} {sector.direction === 'bullish' ? '↑' : sector.direction === 'bearish' ? '↓' : '→'}
-                      </span>
-                    ))}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
 
