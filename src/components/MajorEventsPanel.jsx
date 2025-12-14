@@ -42,9 +42,16 @@ const TEST_HEADLINES = [
   }
 ]
 
+// Helper to format time as HH:MM:SS
+function formatTime(date) {
+  return date.toLocaleTimeString('en-US', { hour12: false })
+}
+
 function MajorEventsPanel() {
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false) // Separate state for refresh loading
+  const [lastUpdated, setLastUpdated] = useState(null) // Track last successful fetch
   const [error, setError] = useState(null)
   const [isExpanded, setIsExpanded] = useState(true)
   const [injecting, setInjecting] = useState(false)
@@ -68,20 +75,25 @@ function MajorEventsPanel() {
   }, [events])
 
   // Fetch major events
-  const fetchEvents = async () => {
+  const fetchEvents = async (isRefresh = false) => {
     try {
       setError(null)
+      if (isRefresh) {
+        setRefreshing(true)
+      }
       const response = await fetch('/api/major-events?limit=10')
       if (!response.ok) {
         throw new Error(`Failed to fetch: ${response.status}`)
       }
       const data = await response.json()
       setEvents(data.events || [])
+      setLastUpdated(new Date()) // Track successful fetch time
     } catch (err) {
       console.error('Failed to fetch major events:', err)
       setError(err.message)
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }
 
@@ -103,15 +115,16 @@ function MajorEventsPanel() {
     })
   }
 
-  // Toggle signal visibility for an event
-  const toggleSignalExpanded = (eventId) => {
+  // Show signal for an event (never hides - only makes visible)
+  const showSignal = (eventId) => {
+    setExpandedSignals(prev => new Set(prev).add(eventId))
+  }
+
+  // Hide signal for an event (only action that can hide)
+  const hideSignal = (eventId) => {
     setExpandedSignals(prev => {
       const next = new Set(prev)
-      if (next.has(eventId)) {
-        next.delete(eventId)
-      } else {
-        next.add(eventId)
-      }
+      next.delete(eventId)
       return next
     })
   }
@@ -386,8 +399,8 @@ function MajorEventsPanel() {
         {/* Trade Signal Section */}
         {isRepresentative && eventId && (
           <div className="mt-2 pt-2 border-t border-gray-600/30">
-            {/* Signal button or toggle */}
-            {!signal ? (
+            {/* Generate button - shown when no signal exists */}
+            {!signal && (
               <button
                 onClick={() => handleGenerateSignal(eventId)}
                 disabled={isSignalLoading}
@@ -414,21 +427,38 @@ function MajorEventsPanel() {
                   </>
                 )}
               </button>
-            ) : (
+            )}
+
+            {/* Show button - shown when signal exists but is hidden */}
+            {signal && !isSignalExpanded && (
               <button
-                onClick={() => toggleSignalExpanded(eventId)}
+                onClick={() => showSignal(eventId)}
                 className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors"
               >
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                 </svg>
-                {isSignalExpanded ? '▾ Hide' : '▸ Show'} Trade Signal
+                ▸ Show Trade Signal
                 {signal.cached && <span className="text-gray-600 ml-1">(cached)</span>}
               </button>
             )}
 
-            {/* Signal display */}
-            {signal && isSignalExpanded && renderTradeSignal(signal)}
+            {/* Signal display with hide button */}
+            {signal && isSignalExpanded && (
+              <>
+                <button
+                  onClick={() => hideSignal(eventId)}
+                  className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                  ▾ Hide Trade Signal
+                  {signal.cached && <span className="text-gray-600 ml-1">(cached)</span>}
+                </button>
+                {renderTradeSignal(signal)}
+              </>
+            )}
           </div>
         )}
 
@@ -626,17 +656,29 @@ function MajorEventsPanel() {
             </div>
           )}
 
-          {/* Refresh Button */}
+          {/* Refresh Button and Last Updated */}
           {!loading && (
-            <button
-              onClick={fetchEvents}
-              className="mt-4 w-full py-2 text-sm text-gray-400 hover:text-white transition-colors flex items-center justify-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Refresh
-            </button>
+            <div className="mt-4 flex flex-col items-center gap-1">
+              <button
+                onClick={() => fetchEvents(true)}
+                disabled={refreshing}
+                className={`w-full py-2 text-sm transition-colors flex items-center justify-center gap-2 ${
+                  refreshing
+                    ? 'text-gray-500 cursor-not-allowed'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <svg className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {refreshing ? 'Refreshing...' : 'Refresh'}
+              </button>
+              {lastUpdated && (
+                <span className="text-xs text-gray-500">
+                  Last updated: {formatTime(lastUpdated)}
+                </span>
+              )}
+            </div>
           )}
         </div>
       )}
