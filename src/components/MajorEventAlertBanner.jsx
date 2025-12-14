@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 
 // LocalStorage key for tracking the last seen major event
 const LAST_SEEN_KEY = 'lastSeenMajorEventId'
@@ -6,8 +6,13 @@ const LAST_SEEN_KEY = 'lastSeenMajorEventId'
 // Polling interval in milliseconds (60 seconds)
 const POLL_INTERVAL = 60000
 
-// Minimum importance score to trigger an alert
-const MIN_IMPORTANCE_SCORE = 70
+// Minimum importance score to trigger an alert (configurable via env, default 70)
+const DEFAULT_IMPORTANCE_THRESHOLD = 70
+const ENV_THRESHOLD = parseInt(import.meta.env.VITE_MAJOR_ALERT_THRESHOLD, 10)
+const MIN_IMPORTANCE_SCORE = Number.isNaN(ENV_THRESHOLD) ? DEFAULT_IMPORTANCE_THRESHOLD : ENV_THRESHOLD
+
+// Custom event name for triggering banner check from other components
+export const TRIGGER_BANNER_CHECK_EVENT = 'triggerMajorEventBannerCheck'
 
 // Helper to get badge color based on importance category
 function getImportanceBadgeStyle(category) {
@@ -25,6 +30,17 @@ function MajorEventAlertBanner({ onViewEvent }) {
   const [alertEvent, setAlertEvent] = useState(null)
   const [isVisible, setIsVisible] = useState(false)
   const [isExiting, setIsExiting] = useState(false)
+
+  // Check if admin mode is enabled via URL query param
+  const isAdmin = useMemo(() => {
+    if (typeof window === 'undefined') return false
+    const params = new URLSearchParams(window.location.search)
+    return params.get('admin') === '1'
+  }, [])
+
+  // Admin override: lower threshold and allow manual events
+  const effectiveThreshold = isAdmin ? 0 : MIN_IMPORTANCE_SCORE
+  const allowManualEvents = isAdmin
 
   // Get the last seen event ID from localStorage
   const getLastSeenId = useCallback(() => {
@@ -75,12 +91,12 @@ function MajorEventAlertBanner({ onViewEvent }) {
       // Check if this is a new event we haven't seen
       const isNewEvent = !lastSeenId || newestId !== lastSeenId
 
-      // Check importance threshold
+      // Check importance threshold (admin mode uses 0, otherwise use configured threshold)
       const importance = newestEvent.analysis?.importanceScore || 0
-      const meetsThreshold = importance >= MIN_IMPORTANCE_SCORE
+      const meetsThreshold = importance >= effectiveThreshold
 
-      // Check if it's not a manual/injected event (optional noise control)
-      const isNotManual = newestEvent.source !== 'manual'
+      // Check if it's not a manual/injected event (admin mode allows manual events)
+      const isNotManual = allowManualEvents || newestEvent.source !== 'manual'
 
       // Show alert if all conditions are met
       if (isNewEvent && meetsThreshold && isNotManual) {
@@ -90,7 +106,7 @@ function MajorEventAlertBanner({ onViewEvent }) {
     } catch (err) {
       console.error('Failed to check for new major events:', err)
     }
-  }, [getLastSeenId])
+  }, [getLastSeenId, effectiveThreshold, allowManualEvents])
 
   // Set up polling
   useEffect(() => {
@@ -101,6 +117,15 @@ function MajorEventAlertBanner({ onViewEvent }) {
     const intervalId = setInterval(checkForNewEvents, POLL_INTERVAL)
 
     return () => clearInterval(intervalId)
+  }, [checkForNewEvents])
+
+  // Listen for custom event to trigger banner check (used by "Test Alert Banner" button)
+  useEffect(() => {
+    const handleTriggerCheck = () => {
+      checkForNewEvents()
+    }
+    window.addEventListener(TRIGGER_BANNER_CHECK_EVENT, handleTriggerCheck)
+    return () => window.removeEventListener(TRIGGER_BANNER_CHECK_EVENT, handleTriggerCheck)
   }, [checkForNewEvents])
 
   // Handle dismiss - hide banner and mark as seen

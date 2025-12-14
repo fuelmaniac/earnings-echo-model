@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
+import { TRIGGER_BANNER_CHECK_EVENT } from './MajorEventAlertBanner'
 
 // Helper to get badge color based on importance category
 function getImportanceBadgeStyle(category) {
@@ -40,6 +41,7 @@ function MajorEventsPanel() {
   const [error, setError] = useState(null)
   const [isExpanded, setIsExpanded] = useState(true)
   const [injecting, setInjecting] = useState(false)
+  const [testingBanner, setTestingBanner] = useState(false)
 
   // Check if admin mode is enabled via URL query param
   const isAdmin = useMemo(() => {
@@ -108,6 +110,55 @@ function MajorEventsPanel() {
     }
   }
 
+  // Handle test alert banner - inject event and trigger banner check
+  const handleTestAlertBanner = async () => {
+    // Prompt for secret
+    const secret = prompt('Enter admin secret:')
+    if (!secret) {
+      return // User cancelled
+    }
+
+    setTestingBanner(true)
+    try {
+      // Clear localStorage so the banner will show for the new event
+      try {
+        localStorage.removeItem('lastSeenMajorEventId')
+      } catch (err) {
+        console.warn('Failed to clear lastSeenMajorEventId:', err)
+      }
+
+      const response = await fetch(`/api/major-events-inject?secret=${encodeURIComponent(secret)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          headline: DEFAULT_TEST_HEADLINE,
+          body: DEFAULT_TEST_BODY
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        alert(`Failed to inject: ${errorData.error || response.status}`)
+        return
+      }
+
+      // Refresh the events list
+      await fetchEvents()
+
+      // Small delay to ensure data is available, then trigger banner check
+      setTimeout(() => {
+        window.dispatchEvent(new Event(TRIGGER_BANNER_CHECK_EVENT))
+      }, 500)
+    } catch (err) {
+      console.error('Test banner error:', err)
+      alert(`Network error: ${err.message}`)
+    } finally {
+      setTestingBanner(false)
+    }
+  }
+
   return (
     <div className="bg-gray-800 rounded-xl border border-gray-700 mb-6" data-major-events-panel>
       {/* Header - Always visible */}
@@ -141,37 +192,65 @@ function MajorEventsPanel() {
       {/* Collapsible Content */}
       {isExpanded && (
         <div className="px-4 pb-4">
-          {/* Admin: Inject Test Event Button */}
+          {/* Admin: Inject Test Event & Test Alert Banner Buttons */}
           {isAdmin && (
             <div className="mb-4 pb-4 border-b border-gray-700">
-              <button
-                onClick={handleInjectTestEvent}
-                disabled={injecting}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
-                  injecting
-                    ? 'bg-orange-600/50 text-orange-300 cursor-not-allowed'
-                    : 'bg-orange-600 hover:bg-orange-500 text-white'
-                }`}
-              >
-                {injecting ? (
-                  <>
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Injecting...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    Inject Test Event
-                  </>
-                )}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={handleInjectTestEvent}
+                  disabled={injecting || testingBanner}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                    injecting
+                      ? 'bg-orange-600/50 text-orange-300 cursor-not-allowed'
+                      : 'bg-orange-600 hover:bg-orange-500 text-white'
+                  }`}
+                >
+                  {injecting ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Injecting...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Inject Test Event
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleTestAlertBanner}
+                  disabled={injecting || testingBanner}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                    testingBanner
+                      ? 'bg-yellow-600/50 text-yellow-300 cursor-not-allowed'
+                      : 'bg-yellow-600 hover:bg-yellow-500 text-white'
+                  }`}
+                >
+                  {testingBanner ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Testing...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                      </svg>
+                      Test Alert Banner
+                    </>
+                  )}
+                </button>
+              </div>
               <p className="text-xs text-gray-500 mt-2">
-                Admin mode: Injects a test event for development/testing purposes.
+                Admin mode: "Inject Test Event" adds an event. "Test Alert Banner" clears seen state, injects an event, and triggers the banner.
               </p>
             </div>
           )}
