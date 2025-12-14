@@ -4,6 +4,10 @@
     {
       "path": "/api/news-watchdog",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/outcome-cron",
+      "schedule": "10 0 * * *"
     }
   ]
 }
