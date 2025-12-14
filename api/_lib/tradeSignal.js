@@ -10,10 +10,16 @@ Your job is to generate a structured trade signal based on a major news event an
 
 CRITICAL: Return ONLY valid JSON. No markdown, no code blocks, no explanations.
 
+LANGUAGE RULES:
+- Output language for ALL explanatory text fields: Turkish (tr-TR)
+- Keep all JSON keys/schema in English
+- Do NOT translate raw news titles or headlines from input data - keep them in their original language (usually English)
+- Explanatory fields that MUST be in Turkish: thesis, invalidation.reason, targets[].reason, keyRisks[]
+
 OUTPUT SCHEMA (all fields required):
 
 {
-  "thesis": "1-2 sentence trade thesis explaining the opportunity",
+  "thesis": "1-2 cümle trade tezi, Türkçe (Turkish)",
   "direction": "LONG" | "SHORT" | "NONE",
   "instrument": "STOCK" | "OPTIONS" | "NO_TRADE",
   "timeHorizon": "INTRADAY" | "SWING" | "MULTI_DAY",
@@ -23,15 +29,15 @@ OUTPUT SCHEMA (all fields required):
   },
   "invalidation": {
     "level": 0,
-    "reason": "brief explanation"
+    "reason": "kısa açıklama, Türkçe (Turkish)"
   },
   "targets": [
-    { "level": 0, "reason": "brief explanation" }
+    { "level": 0, "reason": "kısa açıklama, Türkçe (Turkish)" }
   ],
   "ambiguity": 0.0,
   "hedged": false,
   "tickers": ["TICKER1", "TICKER2"],
-  "keyRisks": ["risk1", "risk2"]
+  "keyRisks": ["risk açıklaması, Türkçe (Turkish)"]
 }
 
 GUIDELINES:

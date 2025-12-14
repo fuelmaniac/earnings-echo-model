@@ -31,7 +31,7 @@ export function computeEchoEdge(echoContext) {
   const notes = [];
 
   if (!echoContext || !echoContext.stats) {
-    notes.push('No echo edge data available');
+    notes.push('Echo edge verisi mevcut değil');
     return { score: 50, notes, echoUsed: false };
   }
 
@@ -61,11 +61,11 @@ export function computeEchoEdge(echoContext) {
   if (sampleValue < 20 && sampleValue >= 10) {
     const penalty = 8;
     score = Math.max(0, score - penalty);
-    notes.push(`Echo sampleSize=${sampleValue} → -${penalty} penalty`);
+    notes.push(`Echo örneklemi=${sampleValue} → -${penalty} ceza`);
   } else if (sampleValue < 10) {
     const penalty = 15;
     score = Math.max(0, score - penalty);
-    notes.push(`Echo sampleSize=${sampleValue} (very small) → -${penalty} penalty`);
+    notes.push(`Echo örneklemi=${sampleValue} (çok küçük) → -${penalty} ceza`);
   }
 
   return { score: Math.round(score), notes, echoUsed: true };
@@ -86,11 +86,11 @@ export function computeEventClarity(llmOutput) {
   if (hedged) {
     const penalty = 10;
     score = Math.max(0, score - penalty);
-    notes.push('LLM used hedged language → -10 penalty');
+    notes.push('LLM belirsiz dil kullandı → -10 ceza');
   }
 
   if (ambiguity >= 0.6) {
-    notes.push('High ambiguity detected in event analysis');
+    notes.push('Olay analizinde yüksek belirsizlik tespit edildi');
   }
 
   return { score: Math.round(score), notes };
@@ -105,7 +105,7 @@ export function computeRegimeVol(marketStats) {
   const notes = [];
 
   if (!marketStats || marketStats.atrPct === undefined) {
-    notes.push('Market stats unavailable');
+    notes.push('Piyasa istatistikleri mevcut değil');
     return { score: 60, notes, marketStatsUsed: false };
   }
 
@@ -115,7 +115,7 @@ export function computeRegimeVol(marketStats) {
   const score = 100 - clamp01((atrPct - 2) / 6) * 100;
 
   if (atrPct >= 5) {
-    notes.push(`ATR% elevated (${atrPct.toFixed(1)}%) → size scaled down`);
+    notes.push(`ATR% yüksek (${atrPct.toFixed(1)}%) → pozisyon küçültüldü`);
   }
 
   return { score: Math.round(score), notes, marketStatsUsed: true };
@@ -130,7 +130,7 @@ export function computeGapRisk(marketStats) {
   const notes = [];
 
   if (!marketStats || marketStats.gapPct === undefined) {
-    notes.push('Gap data unavailable');
+    notes.push('Gap verisi mevcut değil');
     return { score: 65, notes };
   }
 
@@ -140,7 +140,7 @@ export function computeGapRisk(marketStats) {
   const score = 100 - clamp01((gapPct - 1) / 6) * 100;
 
   if (gapPct >= 3) {
-    notes.push(`Large gap detected (${gapPct.toFixed(1)}%) → increased risk`);
+    notes.push(`Büyük gap tespit edildi (${gapPct.toFixed(1)}%) → risk arttı`);
   }
 
   return { score: Math.round(score), notes };
@@ -175,7 +175,7 @@ export function computeFreshness(event) {
     if (hoursSincePublished > 24) {
       const penalty = Math.min(20, Math.floor((hoursSincePublished - 24) / 12) * 5);
       score = Math.max(30, score - penalty);
-      notes.push(`News is ${Math.round(hoursSincePublished)}h old → -${penalty} freshness penalty`);
+      notes.push(`Haber ${Math.round(hoursSincePublished)} saat eski → -${penalty} tazelik cezası`);
     }
   }
 
@@ -234,8 +234,8 @@ export function evaluateSignalRules(params) {
 
   // Rule 1: Overall score too low
   if (overall < 55) {
-    explain.push(`Overall confidence (${overall}%) below threshold`);
-    explain.push('Multiple weak component scores');
+    explain.push(`Genel güven (${overall}%) eşik altında`);
+    explain.push('Birden fazla zayıf bileşen puanı');
     avoidCode = 'AVOID_LOW_CONFIDENCE';
     return { signal: 'AVOID', avoidCode, explain };
   }
@@ -246,15 +246,15 @@ export function evaluateSignalRules(params) {
     const accDecimal = (accuracy ?? 0) / 100;
 
     if (sampleSize && sampleSize < 10) {
-      explain.push(`Echo sample size too small (n=${sampleSize})`);
-      explain.push('Insufficient historical data for reliable signal');
+      explain.push(`Echo örneklem sayısı çok düşük (n=${sampleSize})`);
+      explain.push('Güvenilir sinyal için yetersiz tarihsel veri');
       avoidCode = 'AVOID_NO_EDGE';
       return { signal: 'AVOID', avoidCode, explain };
     }
 
     if (accDecimal < 0.55) {
-      explain.push(`Echo accuracy too low (${accuracy}%)`);
-      explain.push('Historical pattern unreliable');
+      explain.push(`Echo doğruluğu çok düşük (${accuracy}%)`);
+      explain.push('Tarihsel örüntü güvenilir değil');
       avoidCode = 'AVOID_NO_EDGE';
       return { signal: 'AVOID', avoidCode, explain };
     }
@@ -271,9 +271,9 @@ export function evaluateSignalRules(params) {
       const eventClarity = components.eventClarity;
 
       if (echoEdge > 75 && eventClarity > 75) {
-        explain.push('Echo pattern conflicts with event analysis');
-        explain.push(`Echo suggests ${echoDirection}, analysis suggests ${llmDirection}`);
-        explain.push('Strong conviction on both sides - avoid position');
+        explain.push('Echo örüntüsü olay analiziyle çelişiyor');
+        explain.push(`Echo ${echoDirection}, analiz ${llmDirection} öneriyor`);
+        explain.push('Her iki tarafta güçlü kanaat - pozisyon kaçınılmalı');
         avoidCode = 'AVOID_CONFLICT';
         return { signal: 'AVOID', avoidCode, explain };
       }
@@ -282,16 +282,16 @@ export function evaluateSignalRules(params) {
 
   // Rule 4: High volatility
   if (components.regimeVol < 35) {
-    explain.push(`Volatility too high (regime score: ${components.regimeVol})`);
-    explain.push('Market conditions unfavorable for position');
+    explain.push(`Volatilite çok yüksek (rejim puanı: ${components.regimeVol})`);
+    explain.push('Piyasa koşulları pozisyon için uygun değil');
     avoidCode = 'AVOID_TOO_VOLATILE';
     return { signal: 'AVOID', avoidCode, explain };
   }
 
   // Rule 5: High gap risk
   if (components.gapRisk < 35) {
-    explain.push(`Gap risk too high (score: ${components.gapRisk})`);
-    explain.push('Recent price gaps indicate excessive overnight risk');
+    explain.push(`Gap riski çok yüksek (puan: ${components.gapRisk})`);
+    explain.push('Son fiyat gapleri aşırı gece riski gösteriyor');
     avoidCode = 'AVOID_GAP_RISK';
     return { signal: 'AVOID', avoidCode, explain };
   }
@@ -303,8 +303,8 @@ export function evaluateSignalRules(params) {
     const entryLevel = llmOutput?.entry?.level;
 
     if (entryType === 'wait' || (entryLevel && entryLevel > 0)) {
-      explain.push(`Marginal confidence (${overall}%) - wait for better entry`);
-      explain.push(`Target entry level: ${entryLevel || 'pullback'}`);
+      explain.push(`Marjinal güven (${overall}%) - daha iyi giriş bekle`);
+      explain.push(`Hedef giriş seviyesi: ${entryLevel || 'geri çekilme'}`);
       avoidCode = 'WAIT_FOR_LEVEL';
       return { signal: 'WAIT', avoidCode, explain };
     }
@@ -312,8 +312,8 @@ export function evaluateSignalRules(params) {
 
   // Rule 7: Poor gap risk but strong thesis
   if (components.gapRisk < 50 && components.eventClarity > 70) {
-    explain.push('Strong thesis but elevated gap risk');
-    explain.push('Wait for price to stabilize before entry');
+    explain.push('Güçlü tez ama yüksek gap riski');
+    explain.push('Giriş için fiyatın dengelenmesini bekle');
     avoidCode = 'WAIT_FOR_LEVEL';
     return { signal: 'WAIT', avoidCode, explain };
   }
@@ -352,13 +352,13 @@ export function computeSizingHint(params) {
   // Fallback to ATR%
   if (!stopDistancePct && marketStats?.atrPct) {
     stopDistancePct = marketStats.atrPct * 1.0; // 1x ATR as stop
-    notes.push('Stop distance based on ATR');
+    notes.push('Stop mesafesi ATR bazlı');
   }
 
   // Default fallback
   if (!stopDistancePct) {
     stopDistancePct = 3.0; // Conservative default
-    notes.push('Stop distance defaulted (no price levels)');
+    notes.push('Stop mesafesi varsayılan (fiyat seviyesi yok)');
   }
 
   // Compute suggested position size
@@ -371,7 +371,7 @@ export function computeSizingHint(params) {
     suggestedPositionPct = clamp((riskPerTradePct / stopDistancePct) * 10, 1, maxPositionPct);
   } else {
     suggestedPositionPct = 3; // Default conservative size
-    notes.push('Position size defaulted');
+    notes.push('Pozisyon büyüklüğü varsayılan');
   }
 
   return {
@@ -438,7 +438,7 @@ export function buildConfidenceBreakdown(params) {
       finalSignal = 'SELL';
     } else {
       finalSignal = 'AVOID';
-      signalRules.explain.push('LLM returned NONE direction');
+      signalRules.explain.push('LLM NONE yönü döndürdü');
       signalRules.avoidCode = 'AVOID_NO_DIRECTION';
     }
   }
