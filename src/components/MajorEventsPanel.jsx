@@ -47,16 +47,26 @@ function formatTime(date) {
   return date.toLocaleTimeString('en-US', { hour12: false })
 }
 
+// Helper to format ISO timestamp for display
+function formatTimestamp(isoString) {
+  if (!isoString) return 'N/A'
+  const date = new Date(isoString)
+  return date.toLocaleTimeString('en-US', { hour12: false })
+}
+
 function MajorEventsPanel() {
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false) // Separate state for refresh loading
+  const [forceRefreshing, setForceRefreshing] = useState(false) // Force refresh state
   const [lastUpdated, setLastUpdated] = useState(null) // Track last successful fetch
   const [error, setError] = useState(null)
   const [isExpanded, setIsExpanded] = useState(true)
   const [injecting, setInjecting] = useState(false)
   const [testingBanner, setTestingBanner] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState(new Set())
+  // Freshness timestamps
+  const [meta, setMeta] = useState({ generatedAt: null, fetchedAt: null })
   // Trade signal state
   const [signals, setSignals] = useState({}) // eventId -> signal
   const [loadingSignals, setLoadingSignals] = useState(new Set()) // eventIds currently loading
@@ -75,17 +85,28 @@ function MajorEventsPanel() {
   }, [events])
 
   // Fetch major events
-  const fetchEvents = async (isRefresh = false) => {
+  const fetchEvents = async (isRefresh = false, force = false) => {
     try {
       setError(null)
-      if (isRefresh) {
+      if (force) {
+        setForceRefreshing(true)
+      } else if (isRefresh) {
         setRefreshing(true)
       }
-      const response = await fetch('/api/major-events?limit=10')
+      const url = force ? '/api/major-events?limit=10&force=1' : '/api/major-events?limit=10'
+      const response = await fetch(url)
       if (!response.ok) {
         throw new Error(`Failed to fetch: ${response.status}`)
       }
       const data = await response.json()
+
+      // Inject fetchedAt timestamp (browser time)
+      const fetchedAt = new Date().toISOString()
+      setMeta({
+        generatedAt: data.meta?.generatedAt || null,
+        fetchedAt
+      })
+
       setEvents(data.events || [])
       setLastUpdated(new Date()) // Track successful fetch time
     } catch (err) {
@@ -94,6 +115,7 @@ function MajorEventsPanel() {
     } finally {
       setLoading(false)
       setRefreshing(false)
+      setForceRefreshing(false)
     }
   }
 
@@ -154,6 +176,10 @@ function MajorEventsPanel() {
       }
 
       const signal = await response.json()
+
+      // Inject fetchedAt timestamp (browser time) into meta
+      signal.meta = signal.meta || {}
+      signal.meta.fetchedAt = new Date().toISOString()
 
       // Store signal and expand it
       setSignals(prev => ({ ...prev, [eventId]: signal }))
@@ -544,10 +570,22 @@ function MajorEventsPanel() {
 
         {/* Meta info */}
         {signal.meta && (
-          <div className="mt-2 pt-1.5 border-t border-gray-700/30 text-xs text-gray-600 flex gap-3">
-            {signal.meta.echoUsed && <span>Echo ✓</span>}
-            {signal.meta.marketStatsUsed && <span>Market ✓</span>}
-            {signal.meta.modelVersion && <span>v{signal.meta.modelVersion}</span>}
+          <div className="mt-2 pt-1.5 border-t border-gray-700/30 text-xs text-gray-600">
+            <div className="flex gap-3 mb-1">
+              {signal.meta.echoUsed && <span>Echo ✓</span>}
+              {signal.meta.marketStatsUsed && <span>Market ✓</span>}
+              {signal.meta.modelVersion && <span>v{signal.meta.modelVersion}</span>}
+            </div>
+            {(signal.meta.generatedAt || signal.meta.fetchedAt) && (
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-gray-500">
+                {signal.meta.generatedAt && (
+                  <span>Server: {formatTimestamp(signal.meta.generatedAt)}</span>
+                )}
+                {signal.meta.fetchedAt && (
+                  <span>Fetched: {formatTimestamp(signal.meta.fetchedAt)}</span>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -883,23 +921,57 @@ function MajorEventsPanel() {
             </div>
           )}
 
-          {/* Refresh Button and Last Updated */}
+          {/* Freshness Timestamps */}
+          {!loading && (meta.generatedAt || meta.fetchedAt) && (
+            <div className="mt-4 pt-3 border-t border-gray-700/50">
+              <div className="text-xs text-gray-500 space-y-0.5">
+                <div className="flex flex-wrap gap-x-4 gap-y-0.5">
+                  <span>
+                    Updated (server): <span className="text-gray-400">{formatTimestamp(meta.generatedAt)}</span>
+                  </span>
+                  <span>
+                    Fetched (browser): <span className="text-gray-400">{formatTimestamp(meta.fetchedAt)}</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Refresh Buttons */}
           {!loading && (
-            <div className="mt-4 flex flex-col items-center gap-1">
-              <button
-                onClick={() => fetchEvents(true)}
-                disabled={refreshing}
-                className={`w-full py-2 text-sm transition-colors flex items-center justify-center gap-2 ${
-                  refreshing
-                    ? 'text-gray-500 cursor-not-allowed'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                <svg className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                {refreshing ? 'Refreshing...' : 'Refresh'}
-              </button>
+            <div className="mt-3 flex flex-col items-center gap-2">
+              <div className="flex gap-2 w-full">
+                <button
+                  onClick={() => fetchEvents(true, false)}
+                  disabled={refreshing || forceRefreshing}
+                  className={`flex-1 py-2 text-sm transition-colors flex items-center justify-center gap-2 rounded-lg border border-gray-600/50 ${
+                    refreshing || forceRefreshing
+                      ? 'text-gray-500 cursor-not-allowed bg-gray-700/30'
+                      : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                  }`}
+                >
+                  <svg className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  {refreshing ? 'Refreshing...' : 'Refresh'}
+                </button>
+                <button
+                  onClick={() => fetchEvents(false, true)}
+                  disabled={refreshing || forceRefreshing}
+                  className={`flex-1 py-2 text-sm transition-colors flex items-center justify-center gap-2 rounded-lg border ${
+                    forceRefreshing
+                      ? 'text-orange-300 cursor-not-allowed bg-orange-600/30 border-orange-500/50'
+                      : refreshing
+                      ? 'text-gray-500 cursor-not-allowed bg-gray-700/30 border-gray-600/50'
+                      : 'text-orange-400 hover:text-orange-300 hover:bg-orange-600/20 border-orange-500/50'
+                  }`}
+                >
+                  <svg className={`w-4 h-4 ${forceRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  {forceRefreshing ? 'Force refreshing...' : 'Force Refresh'}
+                </button>
+              </div>
               {lastUpdated && (
                 <span className="text-xs text-gray-500">
                   Last updated: {formatTime(lastUpdated)}
