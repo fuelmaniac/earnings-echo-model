@@ -50,6 +50,10 @@ function MajorEventsPanel() {
   const [injecting, setInjecting] = useState(false)
   const [testingBanner, setTestingBanner] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState(new Set())
+  // Trade signal state
+  const [signals, setSignals] = useState({}) // eventId -> signal
+  const [loadingSignals, setLoadingSignals] = useState(new Set()) // eventIds currently loading
+  const [expandedSignals, setExpandedSignals] = useState(new Set()) // eventIds with visible signals
 
   // Check if admin mode is enabled via URL query param
   const isAdmin = useMemo(() => {
@@ -97,6 +101,61 @@ function MajorEventsPanel() {
       }
       return next
     })
+  }
+
+  // Toggle signal visibility for an event
+  const toggleSignalExpanded = (eventId) => {
+    setExpandedSignals(prev => {
+      const next = new Set(prev)
+      if (next.has(eventId)) {
+        next.delete(eventId)
+      } else {
+        next.add(eventId)
+      }
+      return next
+    })
+  }
+
+  // Generate trade signal for an event
+  const handleGenerateSignal = async (eventId) => {
+    if (!eventId) {
+      alert('Event ID is missing')
+      return
+    }
+
+    // Add to loading set
+    setLoadingSignals(prev => new Set(prev).add(eventId))
+
+    try {
+      const response = await fetch('/api/trade-signal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ eventId })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Failed: ${response.status}`)
+      }
+
+      const signal = await response.json()
+
+      // Store signal and expand it
+      setSignals(prev => ({ ...prev, [eventId]: signal }))
+      setExpandedSignals(prev => new Set(prev).add(eventId))
+    } catch (err) {
+      console.error('Trade signal error:', err)
+      alert(`Failed to generate signal: ${err.message}`)
+    } finally {
+      // Remove from loading set
+      setLoadingSignals(prev => {
+        const next = new Set(prev)
+        next.delete(eventId)
+        return next
+      })
+    }
   }
 
   // Handle inject test event (now with variation option)
@@ -182,11 +241,88 @@ function MajorEventsPanel() {
     }
   }
 
+  // Render trade signal display
+  const renderTradeSignal = (signal) => {
+    const actionColors = {
+      long: 'bg-green-500/20 text-green-400 border-green-500/50',
+      short: 'bg-red-500/20 text-red-400 border-red-500/50',
+      avoid: 'bg-gray-500/20 text-gray-400 border-gray-500/50'
+    }
+    const actionLabels = { long: 'LONG', short: 'SHORT', avoid: 'AVOID' }
+    const horizonLabels = { very_short: '1-2 days', short: '1-2 weeks', medium: '1-3 months' }
+
+    return (
+      <div className="mt-3 pt-3 border-t border-gray-600/50">
+        {/* Signal Header */}
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className={`text-xs px-2 py-0.5 rounded border font-bold ${actionColors[signal.action]}`}>
+              {actionLabels[signal.action]}
+            </span>
+            <span className="text-xs text-gray-400">
+              Confidence: <span className={signal.confidence >= 70 ? 'text-green-400' : signal.confidence >= 50 ? 'text-yellow-400' : 'text-gray-400'}>{signal.confidence}%</span>
+            </span>
+            <span className="text-xs text-gray-500">
+              {horizonLabels[signal.horizon]}
+            </span>
+          </div>
+          {signal.cached && (
+            <span className="text-xs text-gray-600">(cached)</span>
+          )}
+        </div>
+
+        {/* One-liner */}
+        <p className="text-xs text-white mb-2 font-medium">{signal.oneLiner}</p>
+
+        {/* Targets */}
+        <div className="flex flex-wrap gap-1 mb-2">
+          {signal.targets.map((ticker, idx) => (
+            <span key={idx} className="text-xs px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded border border-blue-500/30">
+              {ticker}
+            </span>
+          ))}
+        </div>
+
+        {/* Rationale and Risks in columns */}
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          {/* Rationale */}
+          <div>
+            <p className="text-gray-500 mb-1 font-medium">Rationale:</p>
+            <ul className="space-y-0.5">
+              {signal.rationale.map((item, idx) => (
+                <li key={idx} className="text-gray-400 flex gap-1">
+                  <span className="text-green-400">+</span>
+                  <span className="line-clamp-2">{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          {/* Risks */}
+          <div>
+            <p className="text-gray-500 mb-1 font-medium">Key Risks:</p>
+            <ul className="space-y-0.5">
+              {signal.keyRisks.map((item, idx) => (
+                <li key={idx} className="text-gray-400 flex gap-1">
+                  <span className="text-red-400">!</span>
+                  <span className="line-clamp-2">{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // Render a single event card
   const renderEventCard = (event, isRepresentative = true, showRelated = null) => {
     const score = event.analysis?.importanceScore || 0
     const { label: tierLabel, color: tierColor } = getPriorityTier(score)
     const themeKey = getThemeKey(event)
+    const eventId = event.id
+    const signal = signals[eventId]
+    const isSignalLoading = loadingSignals.has(eventId)
+    const isSignalExpanded = expandedSignals.has(eventId)
 
     return (
       <div
@@ -246,6 +382,55 @@ function MajorEventsPanel() {
             </span>
           ))}
         </div>
+
+        {/* Trade Signal Section */}
+        {isRepresentative && eventId && (
+          <div className="mt-2 pt-2 border-t border-gray-600/30">
+            {/* Signal button or toggle */}
+            {!signal ? (
+              <button
+                onClick={() => handleGenerateSignal(eventId)}
+                disabled={isSignalLoading}
+                className={`text-xs px-3 py-1.5 rounded font-medium transition-colors flex items-center gap-1.5 ${
+                  isSignalLoading
+                    ? 'bg-purple-600/50 text-purple-300 cursor-not-allowed'
+                    : 'bg-purple-600 hover:bg-purple-500 text-white'
+                }`}
+              >
+                {isSignalLoading ? (
+                  <>
+                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                    </svg>
+                    Generate Trade Signal
+                  </>
+                )}
+              </button>
+            ) : (
+              <button
+                onClick={() => toggleSignalExpanded(eventId)}
+                className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+                {isSignalExpanded ? '▾ Hide' : '▸ Show'} Trade Signal
+                {signal.cached && <span className="text-gray-600 ml-1">(cached)</span>}
+              </button>
+            )}
+
+            {/* Signal display */}
+            {signal && isSignalExpanded && renderTradeSignal(signal)}
+          </div>
+        )}
 
         {/* Related updates indicator (for representative cards only) */}
         {showRelated && showRelated.count > 0 && (

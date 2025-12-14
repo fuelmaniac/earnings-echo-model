@@ -77,6 +77,7 @@ export default async function handler(req, res) {
       success: true,
       count: events.length,
       events: events.map(event => ({
+        id: event.id,
         headline: event.headline,
         body: event.body,
         source: event.source,
