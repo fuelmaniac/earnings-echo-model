@@ -113,15 +113,164 @@ export function getBannerGradient(color) {
 // ============================================================================
 
 /**
+ * Synonym map for normalizing similar words to a common form
+ * This ensures "closed", "closure", "shut" all map to the same theme
+ */
+const SYNONYM_MAP = {
+  // Closures/shutdowns
+  'closed': 'close',
+  'closure': 'close',
+  'closes': 'close',
+  'closing': 'close',
+  'shut': 'close',
+  'shutdown': 'close',
+  'shutdowns': 'close',
+  'shutting': 'close',
+  'blocked': 'close',
+  'blockade': 'close',
+  'blockades': 'close',
+  // Oil/crude/petroleum
+  'crude': 'oil',
+  'petroleum': 'oil',
+  'brent': 'oil',
+  'wti': 'oil',
+  // Shipping/shipments
+  'shipments': 'ship',
+  'shipping': 'ship',
+  'ships': 'ship',
+  'shipped': 'ship',
+  'tanker': 'ship',
+  'tankers': 'ship',
+  // Prices/pricing -> just remove, it's noise
+  'prices': 'price',
+  'pricing': 'price',
+  'priced': 'price',
+  // Surges/spikes -> normalize to spike
+  'surge': 'spike',
+  'surges': 'spike',
+  'surging': 'spike',
+  'spikes': 'spike',
+  'spiking': 'spike',
+  'soar': 'spike',
+  'soars': 'spike',
+  'soaring': 'spike',
+  'jump': 'spike',
+  'jumps': 'spike',
+  'jumping': 'spike',
+  'rally': 'spike',
+  'rallies': 'spike',
+  'rallying': 'spike',
+  // Drops/falls
+  'drops': 'drop',
+  'dropping': 'drop',
+  'dropped': 'drop',
+  'falls': 'drop',
+  'falling': 'drop',
+  'fell': 'drop',
+  'plunge': 'drop',
+  'plunges': 'drop',
+  'plunging': 'drop',
+  'crash': 'drop',
+  'crashes': 'drop',
+  'crashing': 'drop',
+  'tumble': 'drop',
+  'tumbles': 'drop',
+  'tumbling': 'drop',
+  'sink': 'drop',
+  'sinks': 'drop',
+  'sinking': 'drop',
+  // Cuts
+  'cuts': 'cut',
+  'cutting': 'cut',
+  // Raises/hikes
+  'raises': 'raise',
+  'raised': 'raise',
+  'raising': 'raise',
+  'hike': 'raise',
+  'hikes': 'raise',
+  'hiking': 'raise',
+  'hiked': 'raise',
+  'increase': 'raise',
+  'increases': 'raise',
+  'increasing': 'raise',
+  'increased': 'raise',
+  // Announcements
+  'announces': 'announce',
+  'announced': 'announce',
+  'announcing': 'announce',
+  'announcement': 'announce',
+  'announcements': 'announce',
+  // Disruptions
+  'disrupts': 'disrupt',
+  'disrupted': 'disrupt',
+  'disrupting': 'disrupt',
+  'disruption': 'disrupt',
+  'disruptions': 'disrupt',
+  // Federal Reserve variants
+  'fed': 'federal',
+  'reserve': 'federal',
+  'fomc': 'federal',
+  // Rate variants
+  'rates': 'rate',
+  'interest': 'rate',
+  // Basis points
+  'basis': 'bps',
+  'points': 'bps',
+  'bps': 'bps'
+}
+
+/**
+ * Extended stopwords list for headline normalization
+ * These words add noise and don't contribute to theme identification
+ */
+const STOPWORDS = new Set([
+  // Articles & pronouns
+  'a', 'an', 'the', 'and', 'or', 'but', 'it', 'its', 'he', 'she', 'they',
+  'we', 'you', 'i', 'that', 'this', 'these', 'those', 'who', 'which', 'what',
+  // Prepositions
+  'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'if',
+  'than', 'after', 'before', 'during', 'over', 'under', 'into', 'out', 'up',
+  'down', 'about', 'between', 'through', 'against', 'amid', 'among',
+  // Verbs (be/have/do)
+  'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had',
+  'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might',
+  'must', 'shall', 'can',
+  // News/reporting vocabulary (noise words in headlines)
+  'says', 'said', 'say', 'saying', 'reports', 'reported', 'report',
+  'reporting', 'reportedly', 'according', 'sources', 'source', 'officials',
+  'official', 'confirmed', 'confirms', 'confirm', 'confirmation',
+  'citing', 'cited', 'cites', 'claims', 'claimed', 'claim', 'alleges',
+  'alleged', 'breaking', 'update', 'updates', 'updated', 'latest', 'new',
+  'news', 'just', 'now', 'today', 'yesterday', 'week', 'month', 'year',
+  // Generic/filler words
+  'all', 'some', 'any', 'more', 'most', 'other', 'such', 'only', 'also',
+  'very', 'just', 'even', 'still', 'yet', 'however', 'while', 'when',
+  'where', 'why', 'how', 'not', 'no', 'yes', 'so', 'then', 'here', 'there',
+  // Common headline words that don't identify theme
+  'major', 'big', 'key', 'top', 'first', 'last', 'next', 'early', 'late',
+  'global', 'world', 'international', 'national', 'local',
+  // Market/price movement words (secondary effects, not core theme)
+  'price', 'spike', 'drop', 'market', 'markets', 'trading', 'traders',
+  'investors', 'stocks', 'stock', 'shares', 'share', 'gains', 'losses',
+  'rally', 'selloff', 'volatility', 'volatile',
+  // Impact/consequence words (secondary to core event)
+  'ship', 'disrupt', 'impact', 'impacts', 'affected', 'affects', 'affect',
+  'concern', 'concerns', 'worried', 'worries', 'fear', 'fears', 'amid',
+  'following', 'response', 'reacts', 'reaction', 'reactions'
+])
+
+/**
  * Generate a theme key from an event headline
- * Used for cooldown logic and grouping similar events
+ * Used for BOTH cooldown logic AND grouping similar events
  *
  * Algorithm:
- * - Lowercase the headline
- * - Remove punctuation
- * - Replace numbers with empty string
- * - Keep significant keywords
- * - Truncate to reasonable length for deterministic key
+ * 1. Lowercase the headline
+ * 2. Remove punctuation and numbers
+ * 3. Split into words
+ * 4. Apply synonym normalization (closed/closure/shut -> close)
+ * 5. Filter out stopwords
+ * 6. Keep first ~8 significant tokens (preserves headline structure)
+ * 7. Sort alphabetically for deterministic key
  *
  * @param {object} event - Event object with headline
  * @returns {string} Theme key
@@ -131,29 +280,20 @@ export function getThemeKey(event) {
 
   const headline = event.headline.toLowerCase()
 
-  // Remove punctuation and numbers
+  // Remove punctuation and numbers, normalize whitespace
   let cleaned = headline
-    .replace(/[.,!?;:'"()\[\]{}<>]/g, ' ')  // Remove punctuation
-    .replace(/\d+/g, '')                     // Remove numbers
-    .replace(/\s+/g, ' ')                    // Normalize whitespace
+    .replace(/[.,!?;:'"()\[\]{}<>@#$%^&*+=|\\~/`–—-]/g, ' ')  // Remove punctuation
+    .replace(/\d+/g, '')                                        // Remove numbers
+    .replace(/\s+/g, ' ')                                       // Collapse whitespace
     .trim()
 
-  // Split into words and filter out common stopwords
-  const stopwords = new Set([
-    'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-    'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been',
-    'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
-    'could', 'should', 'may', 'might', 'must', 'shall', 'as', 'if', 'than',
-    'that', 'this', 'it', 'its', 'he', 'she', 'they', 'we', 'you', 'i',
-    'says', 'said', 'reports', 'reported', 'according', 'sources', 'new',
-    'after', 'before', 'during', 'over', 'under', 'into', 'out', 'up', 'down'
-  ])
-
+  // Split into words, apply synonym mapping, filter stopwords
   const words = cleaned.split(' ')
-    .filter(w => w.length > 2 && !stopwords.has(w))
-    .slice(0, 5)  // Keep top 5 significant words
+    .map(w => SYNONYM_MAP[w] || w)           // Apply synonym normalization
+    .filter(w => w.length > 2 && !STOPWORDS.has(w))
+    .slice(0, 8)                              // Keep first ~8 significant tokens
 
-  // Create deterministic key
+  // Create deterministic key by sorting alphabetically
   const themeKey = words.sort().join('-')
 
   // Fallback if empty
