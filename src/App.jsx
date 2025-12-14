@@ -3,6 +3,7 @@ import { useStockQuote } from './hooks/useStockQuote'
 import { useEarningsInfo } from './hooks/useEarningsInfo'
 import NewsIntelPanel from './components/NewsIntelPanel'
 import MajorEventsPanel from './components/MajorEventsPanel'
+import MajorEventAlertBanner from './components/MajorEventAlertBanner'
 import PATTERN_HISTORY from './data/pattern-history.json'
 
 // Signal card data with sector information
@@ -733,6 +734,9 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
+      {/* Major Event Alert Banner - Fixed at top */}
+      <MajorEventAlertBanner />
+
       {/* Header */}
       <header className="border-b border-gray-800 bg-gray-900/95 backdrop-blur sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 py-4">
