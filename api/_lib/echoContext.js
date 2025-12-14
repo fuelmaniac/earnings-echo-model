@@ -1,8 +1,5 @@
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-
-// Load JSON using require which is well-supported
-const patternHistoryData = require('../_data/pattern-history.json');
+// Static ES import ensures Vercel bundler includes the JSON file
+import patternHistoryData from '../_data/pattern-history.json' assert { type: 'json' };
 
 /**
  * Canonical pairs with their constituent tickers
