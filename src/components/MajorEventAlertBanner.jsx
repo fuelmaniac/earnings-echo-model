@@ -1,30 +1,22 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-
-// LocalStorage key for tracking the last seen major event
-const LAST_SEEN_KEY = 'lastSeenMajorEventId'
+import {
+  ALERT_THRESHOLD,
+  LAST_SEEN_KEY,
+  getPriorityTier,
+  getTierBadgeStyle,
+  getBannerGradient,
+  getThemeKey,
+  getImpactShorthand,
+  isThemeInCooldown,
+  updateThemeCooldown,
+  clearAllCooldowns
+} from '../utils/majorEventsUtils'
 
 // Polling interval in milliseconds (60 seconds)
 const POLL_INTERVAL = 60000
 
-// Minimum importance score to trigger an alert (configurable via env, default 70)
-const DEFAULT_IMPORTANCE_THRESHOLD = 70
-const ENV_THRESHOLD = parseInt(import.meta.env.VITE_MAJOR_ALERT_THRESHOLD, 10)
-const MIN_IMPORTANCE_SCORE = Number.isNaN(ENV_THRESHOLD) ? DEFAULT_IMPORTANCE_THRESHOLD : ENV_THRESHOLD
-
 // Custom event name for triggering banner check from other components
 export const TRIGGER_BANNER_CHECK_EVENT = 'triggerMajorEventBannerCheck'
-
-// Helper to get badge color based on importance category
-function getImportanceBadgeStyle(category) {
-  switch (category) {
-    case 'macro_shock':
-      return 'bg-red-500/30 text-red-300 border-red-500/50'
-    case 'sector_shock':
-      return 'bg-yellow-500/30 text-yellow-300 border-yellow-500/50'
-    default:
-      return 'bg-orange-500/30 text-orange-300 border-orange-500/50'
-  }
-}
 
 function MajorEventAlertBanner({ onViewEvent }) {
   const [alertEvent, setAlertEvent] = useState(null)
@@ -39,8 +31,9 @@ function MajorEventAlertBanner({ onViewEvent }) {
   }, [])
 
   // Admin override: lower threshold and allow manual events
-  const effectiveThreshold = isAdmin ? 0 : MIN_IMPORTANCE_SCORE
+  const effectiveThreshold = isAdmin ? 0 : ALERT_THRESHOLD
   const allowManualEvents = isAdmin
+  const bypassCooldown = isAdmin  // Admin mode bypasses cooldown
 
   // Get the last seen event ID from localStorage
   const getLastSeenId = useCallback(() => {
@@ -98,15 +91,18 @@ function MajorEventAlertBanner({ onViewEvent }) {
       // Check if it's not a manual/injected event (admin mode allows manual events)
       const isNotManual = allowManualEvents || newestEvent.source !== 'manual'
 
+      // Check cooldown (admin mode bypasses cooldown)
+      const inCooldown = !bypassCooldown && isThemeInCooldown(newestEvent)
+
       // Show alert if all conditions are met
-      if (isNewEvent && meetsThreshold && isNotManual) {
+      if (isNewEvent && meetsThreshold && isNotManual && !inCooldown) {
         setAlertEvent(newestEvent)
         setIsVisible(true)
       }
     } catch (err) {
       console.error('Failed to check for new major events:', err)
     }
-  }, [getLastSeenId, effectiveThreshold, allowManualEvents])
+  }, [getLastSeenId, effectiveThreshold, allowManualEvents, bypassCooldown])
 
   // Set up polling
   useEffect(() => {
@@ -122,17 +118,23 @@ function MajorEventAlertBanner({ onViewEvent }) {
   // Listen for custom event to trigger banner check (used by "Test Alert Banner" button)
   useEffect(() => {
     const handleTriggerCheck = () => {
+      // Clear cooldowns in admin mode for testing
+      if (isAdmin) {
+        clearAllCooldowns()
+      }
       checkForNewEvents()
     }
     window.addEventListener(TRIGGER_BANNER_CHECK_EVENT, handleTriggerCheck)
     return () => window.removeEventListener(TRIGGER_BANNER_CHECK_EVENT, handleTriggerCheck)
-  }, [checkForNewEvents])
+  }, [checkForNewEvents, isAdmin])
 
   // Handle dismiss - hide banner and mark as seen
   const handleDismiss = useCallback(() => {
     if (alertEvent) {
       const eventId = String(alertEvent.id || alertEvent.storedAt)
       setLastSeenId(eventId)
+      // Update cooldown for this theme
+      updateThemeCooldown(alertEvent)
     }
     setIsExiting(true)
     setTimeout(() => {
@@ -147,6 +149,8 @@ function MajorEventAlertBanner({ onViewEvent }) {
     if (alertEvent) {
       const eventId = String(alertEvent.id || alertEvent.storedAt)
       setLastSeenId(eventId)
+      // Update cooldown for this theme
+      updateThemeCooldown(alertEvent)
     }
     setIsExiting(true)
     setTimeout(() => {
@@ -156,10 +160,21 @@ function MajorEventAlertBanner({ onViewEvent }) {
       if (onViewEvent) {
         onViewEvent(alertEvent)
       } else {
-        // Fallback: scroll to Major Events panel by finding it in DOM
-        const panel = document.querySelector('[data-major-events-panel]')
-        if (panel) {
-          panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        // Fallback: scroll to the specific event card by themeKey, or the panel
+        const themeKey = getThemeKey(alertEvent)
+        const eventCard = document.querySelector(`[data-theme-key="${themeKey}"]`)
+        if (eventCard) {
+          eventCard.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          // Brief highlight effect
+          eventCard.classList.add('ring-2', 'ring-orange-500')
+          setTimeout(() => {
+            eventCard.classList.remove('ring-2', 'ring-orange-500')
+          }, 2000)
+        } else {
+          const panel = document.querySelector('[data-major-events-panel]')
+          if (panel) {
+            panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
         }
       }
       setAlertEvent(null)
@@ -169,8 +184,10 @@ function MajorEventAlertBanner({ onViewEvent }) {
   // Don't render if not visible
   if (!isVisible || !alertEvent) return null
 
-  const category = alertEvent.analysis?.importanceCategory || 'sector_shock'
   const score = alertEvent.analysis?.importanceScore || 0
+  const { label: tierLabel, color: tierColor } = getPriorityTier(score)
+  const impactShorthand = getImpactShorthand(alertEvent)
+  const bannerGradient = getBannerGradient(tierColor)
 
   return (
     <div
@@ -178,7 +195,7 @@ function MajorEventAlertBanner({ onViewEvent }) {
         isExiting ? '-translate-y-full opacity-0' : 'translate-y-0 opacity-100'
       }`}
     >
-      <div className="bg-gradient-to-r from-orange-600/95 via-red-600/95 to-orange-600/95 backdrop-blur border-b border-orange-500/50 shadow-lg shadow-orange-500/20">
+      <div className={`bg-gradient-to-r ${bannerGradient} backdrop-blur border-b border-white/20 shadow-lg`}>
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between gap-4">
             {/* Left: Icon + Content */}
@@ -193,14 +210,21 @@ function MajorEventAlertBanner({ onViewEvent }) {
               {/* Content */}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-xs font-semibold text-white/80 uppercase tracking-wide">
-                    New Macro Event Detected
+                  {/* Main alert line with impact shorthand */}
+                  <span className="text-sm font-semibold text-white uppercase tracking-wide">
+                    New Macro Event
                   </span>
-                  <span className={`text-xs px-2 py-0.5 rounded border ${getImportanceBadgeStyle(category)}`}>
-                    {score}/100 – {category.replace('_', ' ')}
+                  <span className="text-white/60">—</span>
+                  <span className="text-sm font-medium text-white">
+                    {impactShorthand}
+                  </span>
+                  {/* Tier badge */}
+                  <span className={`text-xs px-2 py-0.5 rounded border font-semibold ${getTierBadgeStyle(tierColor)}`}>
+                    {tierLabel}
                   </span>
                 </div>
-                <p className="text-sm font-medium text-white truncate">
+                {/* Full headline in smaller text */}
+                <p className="text-xs text-white/70 truncate" title={alertEvent.headline}>
                   {alertEvent.headline}
                 </p>
               </div>
