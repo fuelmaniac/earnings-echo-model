@@ -1,27 +1,35 @@
 import { kv } from "@vercel/kv";
-import { generateTradeSignal } from "./_lib/tradeSignal.js";
+import { generateLLMSignal } from "./_lib/tradeSignal.js";
+import { buildEchoContext } from "./_lib/echoContext.js";
+import { getMarketStatsForEvent } from "./_lib/marketStats.js";
+import { buildConfidenceBreakdown, CONFIDENCE_MODEL_VERSION } from "./_lib/confidenceEngine.js";
 
 /**
- * Trade Signal API - Generate trade signals for major events
+ * Trade Signal API - Phase 3.3 Signal Quality
  *
  * POST /api/trade-signal
- * Body: { "eventId": "string" }
+ * Body: { "eventId": "string", "symbol"?: "string" }
  *
  * Returns a trade signal with:
- * - action: "long" | "short" | "avoid"
- * - targets: 3-8 tickers/ETFs
- * - horizon: "very_short" | "short" | "medium"
- * - confidence: 0-100
- * - oneLiner: concise trade idea
- * - rationale: 2-4 bullets
- * - keyRisks: 2-4 bullets
+ * - signal: "BUY" | "SELL" | "AVOID" | "WAIT"
+ * - confidence: { overall, grade, components, notes }
+ * - setup: { thesis, direction, instrument, timeHorizon, entry, invalidation, targets }
+ * - sizingHint: { riskPerTradePct, suggestedPositionPct, stopDistancePct, caps }
+ * - explain: array of reasoning bullets
+ * - meta: { modelVersion, echoUsed, marketStatsUsed }
  *
- * Caches signals in KV with 7-day TTL
+ * Caches signals in KV with 7-day TTL, versioned by model version
  */
 
 const MAJOR_EVENTS_KEY = "major_events";
-const SIGNAL_KEY_PREFIX = "signal:";
 const SIGNAL_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
+
+/**
+ * Build versioned cache key
+ */
+function buildCacheKey(eventId) {
+  return `tradeSignal:v${CONFIDENCE_MODEL_VERSION}:${eventId}`;
+}
 
 export default async function handler(req, res) {
   // Set CORS headers
@@ -42,40 +50,43 @@ export default async function handler(req, res) {
   // Check for API key
   if (!process.env.OPENAI_API_KEY) {
     console.error('OPENAI_API_KEY environment variable is not set');
-    return res.status(500).json({ error: 'OPENAI_API_KEY is not configured' });
+    return res.status(500).json({ ok: false, error: 'OPENAI_API_KEY is not configured' });
   }
 
   // Check KV configuration
   if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
     return res.status(500).json({
+      ok: false,
       error: 'Vercel KV is not configured'
     });
   }
 
   // Parse and validate request body
   let eventId;
+  let symbol;
   try {
     const requestBody = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
     eventId = requestBody?.eventId;
+    symbol = requestBody?.symbol; // Optional symbol for market stats
   } catch (parseError) {
     console.error('Failed to parse request body:', parseError);
-    return res.status(400).json({ error: 'Invalid JSON in request body' });
+    return res.status(400).json({ ok: false, error: 'Invalid JSON in request body' });
   }
 
   // Validate eventId is present
   if (!eventId || typeof eventId !== 'string' || eventId.trim().length === 0) {
-    return res.status(400).json({ error: 'eventId is required' });
+    return res.status(400).json({ ok: false, error: 'eventId is required' });
   }
 
   eventId = eventId.trim();
 
   try {
-    // Check if signal already exists in KV cache
-    const signalKey = `${SIGNAL_KEY_PREFIX}${eventId}`;
+    // Check if signal already exists in KV cache (versioned)
+    const signalKey = buildCacheKey(eventId);
     const cachedSignal = await kv.get(signalKey);
 
     if (cachedSignal) {
-      console.log(`Returning cached signal for event: ${eventId}`);
+      console.log(`Returning cached signal for event: ${eventId} (v${CONFIDENCE_MODEL_VERSION})`);
       return res.status(200).json({
         ...cachedSignal,
         cached: true
@@ -87,21 +98,93 @@ export default async function handler(req, res) {
     const event = events.find(e => e.id === eventId);
 
     if (!event) {
-      return res.status(404).json({ error: 'Event not found' });
+      return res.status(404).json({ ok: false, error: 'Event not found' });
     }
 
     // Validate event has necessary data
     if (!event.headline) {
-      return res.status(400).json({ error: 'Event is missing required headline' });
+      return res.status(400).json({ ok: false, error: 'Event is missing required headline' });
     }
 
-    // Generate trade signal using GPT-5.1
     console.log(`Generating trade signal for event: ${eventId}`);
-    const signal = await generateTradeSignal(event, eventId);
+
+    // Step 1: Generate LLM signal
+    let llmOutput;
+    try {
+      llmOutput = await generateLLMSignal(event);
+      console.log('LLM output generated:', llmOutput.direction, llmOutput.instrument);
+    } catch (llmError) {
+      console.error('LLM signal generation failed:', llmError.message);
+      return res.status(200).json({
+        ok: false,
+        error: 'MODEL_PARSE_FAILED',
+        message: 'Failed to generate trade signal from model'
+      });
+    }
+
+    // Step 2: Build echo context (optional, never fails signal)
+    let echoContext = null;
+    try {
+      echoContext = buildEchoContext(event, 50); // Base confidence doesn't matter here
+      if (echoContext) {
+        console.log(`Echo context built: ${echoContext.pairId}`);
+      }
+    } catch (echoError) {
+      console.warn('Echo context build failed (non-fatal):', echoError.message);
+    }
+
+    // Step 3: Fetch market stats (optional, never fails signal)
+    let marketStats = null;
+    try {
+      marketStats = await getMarketStatsForEvent(event);
+      if (marketStats && !marketStats.fallback) {
+        console.log(`Market stats fetched: ATR%=${marketStats.atrPct}, Gap%=${marketStats.gapPct}`);
+      }
+    } catch (marketError) {
+      console.warn('Market stats fetch failed (non-fatal):', marketError.message);
+    }
+
+    // Step 4: Build confidence breakdown and determine signal
+    const confidenceResult = buildConfidenceBreakdown({
+      event,
+      echoContext,
+      llmOutput,
+      marketStats
+    });
+
+    // Step 5: Build final response in new format
+    const signal = {
+      ok: true,
+      symbol: symbol || marketStats?.symbol || llmOutput.tickers[0] || null,
+      eventId,
+      timestamp: new Date().toISOString(),
+      signal: confidenceResult.signal,
+      confidence: confidenceResult.confidence,
+      setup: {
+        thesis: llmOutput.thesis,
+        direction: llmOutput.direction,
+        instrument: confidenceResult.signal === 'AVOID' ? 'NO_TRADE' : llmOutput.instrument,
+        timeHorizon: llmOutput.timeHorizon,
+        entry: llmOutput.entry,
+        invalidation: llmOutput.invalidation,
+        targets: llmOutput.targets
+      },
+      sizingHint: confidenceResult.sizingHint,
+      explain: [
+        ...confidenceResult.explain,
+        ...(llmOutput.keyRisks.length > 0 ? [`Key risks: ${llmOutput.keyRisks[0]}`] : [])
+      ],
+      meta: confidenceResult.meta,
+      // Legacy fields for backward compatibility
+      targets: llmOutput.tickers,
+      keyRisks: llmOutput.keyRisks,
+      // Include echo context if available
+      echoContext: echoContext || undefined
+    };
 
     // Store in KV with TTL
     await kv.set(signalKey, signal, { ex: SIGNAL_TTL_SECONDS });
-    console.log(`Stored signal in KV with ${SIGNAL_TTL_SECONDS}s TTL`);
+    console.log(`Stored signal in KV (v${CONFIDENCE_MODEL_VERSION}) with ${SIGNAL_TTL_SECONDS}s TTL`);
 
     return res.status(200).json({
       ...signal,
@@ -113,15 +196,20 @@ export default async function handler(req, res) {
 
     // Handle specific OpenAI errors
     if (error?.status === 401 || error.message?.includes('Invalid API key')) {
-      return res.status(500).json({ error: 'Invalid OpenAI API key' });
+      return res.status(500).json({ ok: false, error: 'Invalid OpenAI API key' });
     }
     if (error?.status === 429) {
-      return res.status(429).json({ error: 'OpenAI rate limit exceeded. Please try again later.' });
+      return res.status(429).json({ ok: false, error: 'OpenAI rate limit exceeded. Please try again later.' });
     }
     if (error?.status === 503) {
-      return res.status(503).json({ error: 'OpenAI service temporarily unavailable' });
+      return res.status(503).json({ ok: false, error: 'OpenAI service temporarily unavailable' });
     }
 
-    return res.status(500).json({ error: 'Failed to generate trade signal' });
+    // Return 200 with ok:false to avoid UI error loops
+    return res.status(200).json({
+      ok: false,
+      error: 'INTERNAL_ERROR',
+      message: 'Failed to generate trade signal'
+    });
   }
 }
