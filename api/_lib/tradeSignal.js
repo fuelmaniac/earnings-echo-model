@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { buildEchoContext } from "./echoContext.js";
 
 /**
  * System prompt for GPT-5.1 trade signal generation
@@ -96,19 +97,33 @@ export function validateTradeSignal(data) {
 
 /**
  * Normalizes the trade signal response
+ * @param {object} data - Raw signal data from GPT
+ * @param {string} eventId - Event ID
+ * @param {object|null} echoContext - Optional echo context for calibration
  */
-export function normalizeTradeSignal(data, eventId) {
-  return {
+export function normalizeTradeSignal(data, eventId, echoContext = null) {
+  // Use calibrated confidence if echo context is available
+  const baseConfidence = Math.max(0, Math.min(100, Math.round(data.confidence)));
+  const finalConfidence = echoContext ? echoContext.calibratedConfidence : baseConfidence;
+
+  const result = {
     eventId: eventId,
     createdAt: new Date().toISOString(),
     action: data.action,
     targets: data.targets.map(t => String(t).toUpperCase()),
     horizon: data.horizon,
-    confidence: Math.max(0, Math.min(100, Math.round(data.confidence))),
+    confidence: finalConfidence,
     oneLiner: String(data.oneLiner).slice(0, 150),
     rationale: data.rationale.map(r => String(r).slice(0, 120)),
     keyRisks: data.keyRisks.map(r => String(r).slice(0, 120))
   };
+
+  // Add echo context if available
+  if (echoContext) {
+    result.echoContext = echoContext;
+  }
+
+  return result;
 }
 
 /**
@@ -185,6 +200,20 @@ export async function generateTradeSignal(event, eventId) {
     throw new Error('Invalid trade signal structure from model');
   }
 
-  // Normalize and return response
-  return normalizeTradeSignal(parsedResponse, eventId);
+  // Build echo context if applicable (based on event tickers matching canonical pairs)
+  const baseConfidence = Math.max(0, Math.min(100, Math.round(parsedResponse.confidence)));
+  let echoContext = null;
+
+  try {
+    echoContext = buildEchoContext(event, baseConfidence);
+    if (echoContext) {
+      console.log(`Echo context built for pair: ${echoContext.pairId}, alignment: ${echoContext.alignment}, calibrated confidence: ${echoContext.calibratedConfidence}`);
+    }
+  } catch (err) {
+    console.warn('Failed to build echo context:', err.message);
+    // Continue without echo context
+  }
+
+  // Normalize and return response with optional echo context
+  return normalizeTradeSignal(parsedResponse, eventId, echoContext);
 }
