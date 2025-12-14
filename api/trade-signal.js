@@ -134,10 +134,17 @@ export default async function handler(req, res) {
         console.warn('Telemetry write failed (cached):', telemetryError.message);
       }
 
-      return res.status(200).json({
+      // Add generatedAt to meta for freshness debugging
+      const responseWithMeta = {
         ...cachedSignal,
-        cached: true
-      });
+        cached: true,
+        meta: {
+          ...cachedSignal.meta,
+          generatedAt: new Date().toISOString()
+        }
+      };
+
+      return res.status(200).json(responseWithMeta);
     }
 
     // Find the event in the major events list
@@ -200,11 +207,12 @@ export default async function handler(req, res) {
     });
 
     // Step 5: Build final response in new format
+    const generatedAt = new Date().toISOString();
     const signal = {
       ok: true,
       symbol: symbol || marketStats?.symbol || llmOutput.tickers[0] || null,
       eventId,
-      timestamp: new Date().toISOString(),
+      timestamp: generatedAt,
       signal: confidenceResult.signal,
       confidence: confidenceResult.confidence,
       setup: {
@@ -221,7 +229,10 @@ export default async function handler(req, res) {
         ...confidenceResult.explain,
         ...(llmOutput.keyRisks.length > 0 ? [`Key risks: ${llmOutput.keyRisks[0]}`] : [])
       ],
-      meta: confidenceResult.meta,
+      meta: {
+        ...confidenceResult.meta,
+        generatedAt
+      },
       // Legacy fields for backward compatibility
       targets: llmOutput.tickers,
       keyRisks: llmOutput.keyRisks,
