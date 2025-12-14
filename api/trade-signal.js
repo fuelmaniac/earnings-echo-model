@@ -3,6 +3,7 @@ import { generateLLMSignal } from "./_lib/tradeSignal.js";
 import { buildEchoContext } from "./_lib/echoContext.js";
 import { getMarketStatsForEvent } from "./_lib/marketStats.js";
 import { buildConfidenceBreakdown, CONFIDENCE_MODEL_VERSION } from "./_lib/confidenceEngine.js";
+import { buildSignalId, buildTelemetryLog, writeSignalTelemetry } from "./_lib/telemetry.js";
 
 /**
  * Trade Signal API - Phase 3.3 Signal Quality
@@ -80,6 +81,9 @@ export default async function handler(req, res) {
 
   eventId = eventId.trim();
 
+  // Track start time for latency measurement
+  const startTimeMs = Date.now();
+
   try {
     // Check if signal already exists in KV cache (versioned)
     const signalKey = buildCacheKey(eventId);
@@ -87,6 +91,49 @@ export default async function handler(req, res) {
 
     if (cachedSignal) {
       console.log(`Returning cached signal for event: ${eventId} (v${CONFIDENCE_MODEL_VERSION})`);
+
+      // Write telemetry for cached response (non-blocking, swallow errors)
+      try {
+        const latencyMs = Date.now() - startTimeMs;
+        const cachedSymbol = cachedSignal.symbol || symbol;
+        const signalId = buildSignalId({
+          modelVersion: CONFIDENCE_MODEL_VERSION,
+          eventId,
+          symbol: cachedSymbol
+        });
+        const telemetryLog = buildTelemetryLog({
+          signalId,
+          ts: new Date().toISOString(),
+          eventId,
+          symbol: cachedSymbol,
+          theme: cachedSignal.echoContext?.theme || null,
+          source: cachedSignal.source || null,
+          signal: cachedSignal.signal,
+          direction: cachedSignal.setup?.direction,
+          overall: cachedSignal.confidence?.overall,
+          grade: cachedSignal.confidence?.grade,
+          components: cachedSignal.confidence?.components,
+          echoUsed: cachedSignal.meta?.echoUsed,
+          marketStatsUsed: cachedSignal.meta?.marketStatsUsed,
+          atrPct: null,
+          gapPct: null,
+          ambiguity: null,
+          entryType: cachedSignal.setup?.entry?.type,
+          entryLevel: cachedSignal.setup?.entry?.level,
+          invalidationLevel: cachedSignal.setup?.invalidation?.level,
+          stopDistancePct: cachedSignal.sizingHint?.stopDistancePct,
+          riskPerTradePct: cachedSignal.sizingHint?.riskPerTradePct,
+          suggestedPositionPct: cachedSignal.sizingHint?.suggestedPositionPct,
+          cached: true,
+          latencyMs,
+          modelVersion: CONFIDENCE_MODEL_VERSION,
+          avoidCode: cachedSignal.meta?.avoidCode
+        });
+        writeSignalTelemetry({ kv, log: telemetryLog }).catch(() => {});
+      } catch (telemetryError) {
+        console.warn('Telemetry write failed (cached):', telemetryError.message);
+      }
+
       return res.status(200).json({
         ...cachedSignal,
         cached: true
@@ -185,6 +232,48 @@ export default async function handler(req, res) {
     // Store in KV with TTL
     await kv.set(signalKey, signal, { ex: SIGNAL_TTL_SECONDS });
     console.log(`Stored signal in KV (v${CONFIDENCE_MODEL_VERSION}) with ${SIGNAL_TTL_SECONDS}s TTL`);
+
+    // Write telemetry for fresh response (non-blocking, swallow errors)
+    try {
+      const latencyMs = Date.now() - startTimeMs;
+      const finalSymbol = signal.symbol;
+      const telemetrySignalId = buildSignalId({
+        modelVersion: CONFIDENCE_MODEL_VERSION,
+        eventId,
+        symbol: finalSymbol
+      });
+      const telemetryLog = buildTelemetryLog({
+        signalId: telemetrySignalId,
+        ts: signal.timestamp,
+        eventId,
+        symbol: finalSymbol,
+        theme: event.analysis?.theme || event.theme || null,
+        source: event.source || null,
+        signal: signal.signal,
+        direction: llmOutput.direction,
+        overall: signal.confidence?.overall,
+        grade: signal.confidence?.grade,
+        components: signal.confidence?.components,
+        echoUsed: signal.meta?.echoUsed,
+        marketStatsUsed: signal.meta?.marketStatsUsed,
+        atrPct: marketStats?.atrPct ?? null,
+        gapPct: marketStats?.gapPct ?? null,
+        ambiguity: llmOutput.ambiguity ?? null,
+        entryType: llmOutput.entry?.type,
+        entryLevel: llmOutput.entry?.level,
+        invalidationLevel: llmOutput.invalidation?.level,
+        stopDistancePct: signal.sizingHint?.stopDistancePct,
+        riskPerTradePct: signal.sizingHint?.riskPerTradePct,
+        suggestedPositionPct: signal.sizingHint?.suggestedPositionPct,
+        cached: false,
+        latencyMs,
+        modelVersion: CONFIDENCE_MODEL_VERSION,
+        avoidCode: signal.meta?.avoidCode
+      });
+      writeSignalTelemetry({ kv, log: telemetryLog }).catch(() => {});
+    } catch (telemetryError) {
+      console.warn('Telemetry write failed (fresh):', telemetryError.message);
+    }
 
     return res.status(200).json({
       ...signal,
