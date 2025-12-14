@@ -109,7 +109,7 @@ function MajorEventsPanel() {
   }
 
   return (
-    <div className="bg-gray-800 rounded-xl border border-gray-700 mb-6">
+    <div className="bg-gray-800 rounded-xl border border-gray-700 mb-6" data-major-events-panel>
       {/* Header - Always visible */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
