@@ -8,6 +8,12 @@ import {
   getGroupSources,
   clearAllCooldowns
 } from '../utils/majorEventsUtils'
+import {
+  HELPER_STRINGS,
+  EXPLANATION_BLOCK_ITEMS,
+  getBeginnerModeState,
+  setBeginnerModeState
+} from '../utils/beginnerModeHelpers'
 
 // Helper to format relative time
 function formatRelativeTime(dateString) {
@@ -71,6 +77,9 @@ function MajorEventsPanel() {
   const [signals, setSignals] = useState({}) // eventId -> signal
   const [loadingSignals, setLoadingSignals] = useState(new Set()) // eventIds currently loading
   const [expandedSignals, setExpandedSignals] = useState(new Set()) // eventIds with visible signals
+  // Beginner mode state
+  const [beginnerMode, setBeginnerMode] = useState(false)
+  const [explanationExpanded, setExplanationExpanded] = useState(false) // For collapsible "Ne demek?" block
 
   // Check if admin mode is enabled via URL query param
   const isAdmin = useMemo(() => {
@@ -123,6 +132,22 @@ function MajorEventsPanel() {
   useEffect(() => {
     fetchEvents()
   }, [])
+
+  // Load beginner mode preference from localStorage on mount
+  useEffect(() => {
+    setBeginnerMode(getBeginnerModeState())
+  }, [])
+
+  // Toggle beginner mode handler
+  const handleToggleBeginnerMode = () => {
+    const newState = !beginnerMode
+    setBeginnerMode(newState)
+    setBeginnerModeState(newState)
+    // Reset explanation expanded when turning off beginner mode
+    if (!newState) {
+      setExplanationExpanded(false)
+    }
+  }
 
   // Toggle expanded state for a group
   const toggleGroupExpanded = (themeKey) => {
@@ -280,6 +305,68 @@ function MajorEventsPanel() {
     }
   }
 
+  // Beginner mode helper text component (Pattern A)
+  const BeginnerHelper = ({ helperKey, className = '' }) => {
+    if (!beginnerMode) return null
+    const helper = HELPER_STRINGS[helperKey]
+    if (!helper) return null
+    return (
+      <p className={`text-xs text-gray-500 mt-0.5 leading-snug ${className}`}>
+        {helper.helper}
+      </p>
+    )
+  }
+
+  // Info tooltip component (Pattern B) - shows when beginner mode is OFF
+  const InfoTooltip = ({ helperKey, className = '' }) => {
+    if (beginnerMode) return null // Hide when beginner mode is ON (inline helpers shown instead)
+    const [showTooltip, setShowTooltip] = useState(false)
+    const helper = HELPER_STRINGS[helperKey]
+    if (!helper) return null
+    return (
+      <span
+        className={`relative inline-flex items-center cursor-help ${className}`}
+        onMouseEnter={() => setShowTooltip(true)}
+        onMouseLeave={() => setShowTooltip(false)}
+        onClick={() => setShowTooltip(!showTooltip)}
+      >
+        <svg className="w-3 h-3 text-gray-500 hover:text-gray-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        {showTooltip && (
+          <span className="absolute z-10 bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-gray-200 bg-gray-800 border border-gray-600 rounded shadow-lg whitespace-nowrap max-w-xs">
+            {helper.helper}
+          </span>
+        )}
+      </span>
+    )
+  }
+
+  // Collapsible explanation block (Pattern C) - shows when beginner mode is OFF
+  const ExplanationBlock = () => {
+    if (beginnerMode) return null // Hide when beginner mode is ON (inline helpers shown instead)
+    return (
+      <div className="mt-3 pt-2 border-t border-gray-700/30">
+        <button
+          onClick={() => setExplanationExpanded(!explanationExpanded)}
+          className="text-xs text-gray-500 hover:text-gray-400 flex items-center gap-1 transition-colors"
+        >
+          <span>{explanationExpanded ? '▾' : '▸'}</span>
+          <span>Ne demek?</span>
+        </button>
+        {explanationExpanded && (
+          <div className="mt-2 pl-3 space-y-1">
+            {EXPLANATION_BLOCK_ITEMS.map((item, idx) => (
+              <p key={idx} className="text-xs text-gray-500 leading-snug">
+                • {item.text}
+              </p>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   // Render echo context section
   const renderEchoContext = (echoContext) => {
     if (!echoContext) return null
@@ -435,42 +522,100 @@ function MajorEventsPanel() {
     return (
       <div className="mt-3 pt-3 border-t border-gray-600/50">
         {/* Signal Header with Grade */}
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <span className={`text-xs px-2 py-0.5 rounded border font-bold ${signalColors[signalType] || signalColors.AVOID}`}>
-              {signalType}
-            </span>
-            <span className={`text-sm font-bold ${gradeColors[grade]}`}>
-              {grade}
-            </span>
-            <span className="text-xs text-gray-400">
-              {overall}%
-            </span>
-            <span className="text-xs text-gray-500">
-              {horizonLabels[timeHorizon] || timeHorizon}
-            </span>
+        <div className="mb-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className={`text-xs px-2 py-0.5 rounded border font-bold ${signalColors[signalType] || signalColors.AVOID}`}>
+                {signalType}
+              </span>
+              <InfoTooltip helperKey={`signal${signalType.charAt(0) + signalType.slice(1).toLowerCase()}`} />
+              <span className={`text-sm font-bold ${gradeColors[grade]}`}>
+                {grade}
+              </span>
+              <InfoTooltip helperKey="confidenceGrade" />
+              <span className="text-xs text-gray-400">
+                {overall}%
+              </span>
+              <InfoTooltip helperKey="confidence" />
+              <span className="text-xs text-gray-500">
+                {horizonLabels[timeHorizon] || timeHorizon}
+              </span>
+              <InfoTooltip helperKey="timeHorizon" />
+            </div>
+            {signal.cached && (
+              <span className="text-xs text-gray-600">(cached)</span>
+            )}
           </div>
-          {signal.cached && (
-            <span className="text-xs text-gray-600">(cached)</span>
-          )}
+          {/* Beginner mode helpers for signal and confidence */}
+          <BeginnerHelper helperKey={`signal${signalType.charAt(0) + signalType.slice(1).toLowerCase()}`} />
+          <BeginnerHelper helperKey="confidence" />
         </div>
 
         {/* Echo Context Section */}
         {renderEchoContext(signal.echoContext)}
 
         {/* Thesis */}
-        <p className="text-xs text-white mb-2 font-medium">{thesis}</p>
+        <div className="mb-2">
+          <div className="flex items-start gap-1">
+            <p className="text-xs text-white font-medium flex-1">{thesis}</p>
+            <InfoTooltip helperKey="thesis" />
+          </div>
+          <BeginnerHelper helperKey="thesis" />
+        </div>
 
         {/* Confidence Breakdown */}
         {Object.keys(components).length > 0 && (
           <div className="mb-3 p-2 bg-gray-800/50 rounded border border-gray-700/50">
-            <p className="text-xs text-gray-500 mb-1.5 font-medium">Confidence Breakdown</p>
+            <div className="flex items-center gap-1 mb-1.5">
+              <p className="text-xs text-gray-500 font-medium">Confidence Breakdown</p>
+              <InfoTooltip helperKey="confidence" className="ml-0.5" />
+            </div>
             <div className="space-y-1">
-              {components.echoEdge !== undefined && renderComponentBar('Echo Edge', components.echoEdge)}
-              {components.eventClarity !== undefined && renderComponentBar('Clarity', components.eventClarity)}
-              {components.regimeVol !== undefined && renderComponentBar('Vol Regime', components.regimeVol)}
-              {components.gapRisk !== undefined && renderComponentBar('Gap Risk', components.gapRisk)}
-              {components.freshness !== undefined && renderComponentBar('Freshness', components.freshness)}
+              {components.echoEdge !== undefined && (
+                <div>
+                  <div className="flex items-center gap-1">
+                    {renderComponentBar('Echo Edge', components.echoEdge)}
+                    <InfoTooltip helperKey="echoEdge" />
+                  </div>
+                  <BeginnerHelper helperKey="echoEdge" className="ml-20 pl-2" />
+                </div>
+              )}
+              {components.eventClarity !== undefined && (
+                <div>
+                  <div className="flex items-center gap-1">
+                    {renderComponentBar('Clarity', components.eventClarity)}
+                    <InfoTooltip helperKey="eventClarity" />
+                  </div>
+                  <BeginnerHelper helperKey="eventClarity" className="ml-20 pl-2" />
+                </div>
+              )}
+              {components.regimeVol !== undefined && (
+                <div>
+                  <div className="flex items-center gap-1">
+                    {renderComponentBar('Vol Regime', components.regimeVol)}
+                    <InfoTooltip helperKey="regimeVol" />
+                  </div>
+                  <BeginnerHelper helperKey="regimeVol" className="ml-20 pl-2" />
+                </div>
+              )}
+              {components.gapRisk !== undefined && (
+                <div>
+                  <div className="flex items-center gap-1">
+                    {renderComponentBar('Gap Risk', components.gapRisk)}
+                    <InfoTooltip helperKey="gapRisk" />
+                  </div>
+                  <BeginnerHelper helperKey="gapRisk" className="ml-20 pl-2" />
+                </div>
+              )}
+              {components.freshness !== undefined && (
+                <div>
+                  <div className="flex items-center gap-1">
+                    {renderComponentBar('Freshness', components.freshness)}
+                    <InfoTooltip helperKey="freshness" />
+                  </div>
+                  <BeginnerHelper helperKey="freshness" className="ml-20 pl-2" />
+                </div>
+              )}
             </div>
             {/* Notes */}
             {confidence.notes && confidence.notes.length > 0 && (
@@ -486,16 +631,22 @@ function MajorEventsPanel() {
         {/* Sizing Hint - only show for BUY/SELL */}
         {!isAvoidOrWait && sizingHint.suggestedPositionPct !== undefined && (
           <div className="mb-2 p-2 bg-blue-900/20 rounded border border-blue-500/30">
-            <p className="text-xs text-blue-300 mb-1 font-medium">Position Sizing</p>
+            <div className="flex items-center gap-1 mb-1">
+              <p className="text-xs text-blue-300 font-medium">Position Sizing</p>
+              <InfoTooltip helperKey="sizing" />
+            </div>
             <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
-              <span className="text-gray-400">
+              <span className="text-gray-400 flex items-center gap-0.5">
                 Risk: <span className="text-blue-300">{sizingHint.riskPerTradePct}%</span>
+                <InfoTooltip helperKey="riskPerTrade" />
               </span>
-              <span className="text-gray-400">
+              <span className="text-gray-400 flex items-center gap-0.5">
                 Size: <span className="text-blue-300">{sizingHint.suggestedPositionPct}%</span>
+                <InfoTooltip helperKey="suggestedPosition" />
               </span>
-              <span className="text-gray-400">
+              <span className="text-gray-400 flex items-center gap-0.5">
                 Stop: <span className="text-blue-300">{sizingHint.stopDistancePct}%</span>
+                <InfoTooltip helperKey="stopDistance" />
               </span>
               {sizingHint.caps?.maxPositionPct && (
                 <span className="text-gray-500">
@@ -503,15 +654,19 @@ function MajorEventsPanel() {
                 </span>
               )}
             </div>
+            <BeginnerHelper helperKey="sizing" />
           </div>
         )}
 
         {/* AVOID/WAIT Reasons */}
         {isAvoidOrWait && explain.length > 0 && (
           <div className="mb-2 p-2 bg-yellow-900/20 rounded border border-yellow-500/30">
-            <p className="text-xs text-yellow-300 mb-1 font-medium">
-              {signalType === 'WAIT' ? 'Wait Conditions' : 'Avoid Reasons'}
-            </p>
+            <div className="flex items-center gap-1 mb-1">
+              <p className="text-xs text-yellow-300 font-medium">
+                {signalType === 'WAIT' ? 'Bekleme Koşulları' : 'Kaçınma Nedenleri'}
+              </p>
+              <InfoTooltip helperKey={signalType === 'WAIT' ? 'signalWait' : 'signalAvoid'} />
+            </div>
             <ul className="space-y-0.5">
               {explain.map((reason, idx) => (
                 <li key={idx} className="text-xs text-gray-400 flex gap-1">
@@ -520,43 +675,58 @@ function MajorEventsPanel() {
                 </li>
               ))}
             </ul>
+            <BeginnerHelper helperKey={signalType === 'WAIT' ? 'signalWait' : 'signalAvoid'} />
           </div>
         )}
 
         {/* Entry/Invalidation for BUY/SELL */}
         {!isAvoidOrWait && signal.setup && (
-          <div className="mb-2 text-xs">
-            {signal.setup.entry?.level > 0 && (
-              <span className="text-gray-400 mr-3">
-                Entry: <span className="text-white">{signal.setup.entry.type} @ ${signal.setup.entry.level.toFixed(2)}</span>
-              </span>
-            )}
-            {signal.setup.invalidation?.level > 0 && (
-              <span className="text-gray-400">
-                Stop: <span className="text-red-400">${signal.setup.invalidation.level.toFixed(2)}</span>
-                {signal.setup.invalidation.reason && (
-                  <span className="text-gray-500 ml-1">({signal.setup.invalidation.reason})</span>
-                )}
-              </span>
-            )}
+          <div className="mb-2">
+            <div className="text-xs flex flex-wrap gap-x-3 gap-y-1">
+              {signal.setup.entry?.level > 0 && (
+                <span className="text-gray-400 flex items-center gap-0.5">
+                  Entry: <span className="text-white">{signal.setup.entry.type} @ ${signal.setup.entry.level.toFixed(2)}</span>
+                  <InfoTooltip helperKey="entry" />
+                </span>
+              )}
+              {signal.setup.invalidation?.level > 0 && (
+                <span className="text-gray-400 flex items-center gap-0.5">
+                  Stop: <span className="text-red-400">${signal.setup.invalidation.level.toFixed(2)}</span>
+                  {signal.setup.invalidation.reason && (
+                    <span className="text-gray-500 ml-1">({signal.setup.invalidation.reason})</span>
+                  )}
+                  <InfoTooltip helperKey="invalidation" />
+                </span>
+              )}
+            </div>
+            {signal.setup.invalidation?.level > 0 && <BeginnerHelper helperKey="invalidation" />}
           </div>
         )}
 
         {/* Targets */}
         {targets.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-2">
-            {targets.map((ticker, idx) => (
-              <span key={idx} className="text-xs px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded border border-blue-500/30">
-                {ticker}
-              </span>
-            ))}
+          <div className="mb-2">
+            <div className="flex items-center gap-1 mb-1">
+              <span className="text-xs text-gray-500 font-medium">Hedef Enstrümanlar:</span>
+              <InfoTooltip helperKey="targets" />
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {targets.map((ticker, idx) => (
+                <span key={idx} className="text-xs px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded border border-blue-500/30">
+                  {ticker}
+                </span>
+              ))}
+            </div>
           </div>
         )}
 
         {/* Key Risks */}
         {keyRisks.length > 0 && (
           <div className="text-xs">
-            <p className="text-gray-500 mb-1 font-medium">Key Risks:</p>
+            <div className="flex items-center gap-1 mb-1">
+              <p className="text-gray-500 font-medium">Temel Riskler:</p>
+              <InfoTooltip helperKey="keyRisks" />
+            </div>
             <ul className="space-y-0.5">
               {keyRisks.slice(0, 3).map((item, idx) => (
                 <li key={idx} className="text-gray-400 flex gap-1">
@@ -565,6 +735,7 @@ function MajorEventsPanel() {
                 </li>
               ))}
             </ul>
+            <BeginnerHelper helperKey="keyRisks" />
           </div>
         )}
 
@@ -588,6 +759,9 @@ function MajorEventsPanel() {
             )}
           </div>
         )}
+
+        {/* Pattern C: Collapsible "Ne demek?" explanation block (when beginner mode is OFF) */}
+        <ExplanationBlock />
       </div>
     )
   }
@@ -752,11 +926,11 @@ function MajorEventsPanel() {
   return (
     <div className="bg-gray-800 rounded-xl border border-gray-700 mb-6" data-major-events-panel>
       {/* Header - Always visible */}
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between p-4 hover:bg-gray-700/30 transition-colors rounded-t-xl"
-      >
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between p-4 rounded-t-xl">
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex-1 flex items-center gap-3 hover:bg-gray-700/30 transition-colors rounded-lg p-1 -m-1"
+        >
           <div className="p-2 bg-orange-500/20 rounded-lg">
             <svg className="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -768,16 +942,40 @@ function MajorEventsPanel() {
               {loading ? 'Loading...' : `${eventGroups.length} event group${eventGroups.length !== 1 ? 's' : ''} (${events.length} total)`}
             </p>
           </div>
+        </button>
+        <div className="flex items-center gap-3">
+          {/* Beginner Mode Toggle */}
+          <button
+            onClick={handleToggleBeginnerMode}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors ${
+              beginnerMode
+                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
+                : 'bg-gray-700/50 text-gray-400 border border-gray-600/50 hover:bg-gray-700 hover:text-gray-300'
+            }`}
+            title={beginnerMode ? 'Beginner Mode: ON' : 'Beginner Mode: OFF'}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
+            <span className="hidden sm:inline">Beginner</span>
+            <span className={`w-1.5 h-1.5 rounded-full ${beginnerMode ? 'bg-blue-400' : 'bg-gray-500'}`} />
+          </button>
+          {/* Expand/Collapse chevron */}
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="p-1 hover:bg-gray-700/30 rounded transition-colors"
+          >
+            <svg
+              className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
         </div>
-        <svg
-          className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
+      </div>
 
       {/* Collapsible Content */}
       {isExpanded && (
