@@ -260,6 +260,16 @@ export default async function handler(req, res) {
     // Mark run start time for metrics
     await setMetric("lastRunAt", new Date().toISOString());
 
+    // Track last fetch for simple debug endpoint
+    const saveLastFetch = async (items) => {
+      const lastFetch = {
+        timestamp: new Date().toISOString(),
+        count: items.length,
+        headlines: items.slice(0, 20).map(n => n.headline)
+      };
+      await kv.set('news:lastFetch', lastFetch, { ex: 86400 });
+    };
+
     // For POST requests, allow manual news injection for testing
     if (req.method === 'POST' && req.body) {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
@@ -282,6 +292,9 @@ export default async function handler(req, res) {
 
     diagnostics.newsSource = newsSource;
     diagnostics.rawNewsCount = newsItems.length;
+
+    // Save last fetch info for debug endpoint
+    await saveLastFetch(newsItems);
 
     // Log raw fetched items (capped to avoid flooding)
     await setMetric("rawFetchedLastRun", newsItems.length);
