@@ -71,6 +71,12 @@ function MajorEventsPanel() {
   const [injecting, setInjecting] = useState(false)
   const [testingBanner, setTestingBanner] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState(new Set())
+  // Admin Raw Feed state
+  const [rawFeedData, setRawFeedData] = useState(null)
+  const [rawFeedLoading, setRawFeedLoading] = useState(false)
+  const [rawFeedExpanded, setRawFeedExpanded] = useState(false)
+  const [rawFeedSearch, setRawFeedSearch] = useState('')
+  const [healthData, setHealthData] = useState(null)
   // Freshness timestamps
   const [meta, setMeta] = useState({ generatedAt: null, fetchedAt: null })
   // Trade signal state
@@ -304,6 +310,42 @@ function MajorEventsPanel() {
       setTestingBanner(false)
     }
   }
+
+  // Fetch raw feed data for admin debug panel
+  const fetchRawFeed = async () => {
+    const secret = prompt('Enter admin secret:')
+    if (!secret) return
+
+    setRawFeedLoading(true)
+    try {
+      const response = await fetch(`/api/admin/raw-news?admin=1&secret=${encodeURIComponent(secret)}&limit=50`)
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        alert(`Failed to fetch raw feed: ${errorData.error || response.status}`)
+        return
+      }
+      const data = await response.json()
+      setRawFeedData(data)
+      setHealthData(data.health)
+      setRawFeedExpanded(true)
+    } catch (err) {
+      console.error('Raw feed fetch error:', err)
+      alert(`Network error: ${err.message}`)
+    } finally {
+      setRawFeedLoading(false)
+    }
+  }
+
+  // Filter raw feed items by search term (client-side)
+  const filteredRawItems = useMemo(() => {
+    if (!rawFeedData?.items) return []
+    if (!rawFeedSearch.trim()) return rawFeedData.items
+    const searchLower = rawFeedSearch.toLowerCase()
+    return rawFeedData.items.filter(item =>
+      item.headline?.toLowerCase().includes(searchLower) ||
+      item.source?.toLowerCase().includes(searchLower)
+    )
+  }, [rawFeedData?.items, rawFeedSearch])
 
   // Beginner mode helper text component (Pattern A)
   const BeginnerHelper = ({ helperKey, className = '' }) => {
@@ -983,6 +1025,39 @@ function MajorEventsPanel() {
           {/* Admin Controls */}
           {isAdmin && (
             <div className="mb-4 pb-4 border-b border-gray-700">
+              {/* Health Banner */}
+              {healthData && healthData.status !== 'ok' && (
+                <div className={`mb-3 p-3 rounded-lg border ${
+                  healthData.status === 'error'
+                    ? 'bg-red-500/10 border-red-500/30'
+                    : 'bg-yellow-500/10 border-yellow-500/30'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm font-medium ${
+                      healthData.status === 'error' ? 'text-red-400' : 'text-yellow-400'
+                    }`}>
+                      {healthData.status === 'error' ? '⚠️ Ingest Error' : '⚡ Ingest Warning'}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      {healthData.ts ? formatRelativeTime(healthData.ts) : ''}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">{healthData.message}</p>
+                  {healthData.finnhubStatus && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Finnhub: {healthData.finnhubStatus.count || 0} items, status {healthData.finnhubStatus.status || 'N/A'}
+                      {healthData.finnhubStatus.error && ` (${healthData.finnhubStatus.error})`}
+                    </p>
+                  )}
+                  {healthData.newsapiStatus && (
+                    <p className="text-xs text-gray-500">
+                      NewsAPI: {healthData.newsapiStatus.count || 0} items, status {healthData.newsapiStatus.status || 'N/A'}
+                      {healthData.newsapiStatus.error && ` (${healthData.newsapiStatus.error})`}
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => handleInjectTestEvent(0)}
@@ -1050,10 +1125,126 @@ function MajorEventsPanel() {
                     </>
                   )}
                 </button>
+                <button
+                  onClick={fetchRawFeed}
+                  disabled={rawFeedLoading}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                    rawFeedLoading
+                      ? 'bg-purple-600/50 text-purple-300 cursor-not-allowed'
+                      : 'bg-purple-600 hover:bg-purple-500 text-white'
+                  }`}
+                >
+                  {rawFeedLoading ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+                      </svg>
+                      Raw Feed Debug
+                    </>
+                  )}
+                </button>
               </div>
               <p className="text-xs text-gray-500 mt-2">
                 Admin mode: Inject similar events to test grouping & cooldown. "Test Alert Banner" clears all state and shows banner.
               </p>
+
+              {/* Raw Feed Debug Panel */}
+              {rawFeedExpanded && rawFeedData && (
+                <div className="mt-4 p-3 bg-gray-900/50 rounded-lg border border-gray-700">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-medium text-purple-300">Raw Feed Debug</h4>
+                      <span className="text-xs text-gray-500">
+                        {rawFeedData.ts ? formatRelativeTime(rawFeedData.ts) : ''}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setRawFeedExpanded(false)}
+                      className="text-gray-500 hover:text-gray-400"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* Summary stats */}
+                  <div className="flex flex-wrap gap-3 mb-3 text-xs">
+                    <span className="text-gray-400">
+                      Source: <span className="text-white">{rawFeedData.source || 'N/A'}</span>
+                    </span>
+                    <span className="text-gray-400">
+                      Fetched: <span className="text-white">{rawFeedData.fetchedCount || 0}</span>
+                    </span>
+                    <span className="text-gray-400">
+                      Showing: <span className="text-white">{filteredRawItems.length}</span>
+                    </span>
+                    {rawFeedData.fallbackUsed && (
+                      <span className="text-yellow-400">Fallback used</span>
+                    )}
+                  </div>
+
+                  {/* Search box */}
+                  <div className="mb-3">
+                    <input
+                      type="text"
+                      placeholder="Search headlines..."
+                      value={rawFeedSearch}
+                      onChange={(e) => setRawFeedSearch(e.target.value)}
+                      className="w-full px-3 py-1.5 text-sm bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+
+                  {/* Items list */}
+                  <div className="max-h-64 overflow-y-auto space-y-2">
+                    {filteredRawItems.length === 0 ? (
+                      <p className="text-xs text-gray-500 text-center py-4">No items found</p>
+                    ) : (
+                      filteredRawItems.map((item, idx) => (
+                        <div key={idx} className="p-2 bg-gray-800/50 rounded border border-gray-700/50">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-xs text-white leading-snug flex-1">{item.headline}</p>
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${
+                              item.provider === 'finnhub'
+                                ? 'bg-blue-500/20 text-blue-400'
+                                : item.provider === 'newsapi'
+                                ? 'bg-green-500/20 text-green-400'
+                                : 'bg-gray-500/20 text-gray-400'
+                            }`}>
+                              {item.provider || 'unknown'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs text-gray-500">{item.source}</span>
+                            <span className="text-xs text-gray-600">•</span>
+                            <span className="text-xs text-gray-500">
+                              {item.timestamp ? formatRelativeTime(item.timestamp) : 'N/A'}
+                            </span>
+                            {item.url && (
+                              <a
+                                href={item.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-purple-400 hover:text-purple-300"
+                              >
+                                Link
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
