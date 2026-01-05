@@ -5,6 +5,7 @@ import NewsIntelPanel from './components/NewsIntelPanel'
 import MajorEventsPanel from './components/MajorEventsPanel'
 import MajorEventAlertBanner from './components/MajorEventAlertBanner'
 import NewsDebugConsole from './components/NewsDebugConsole'
+import RawFeedPanel from './components/RawFeedPanel'
 import PATTERN_HISTORY from './data/pattern-history.json'
 
 // Signal card data with sector information
@@ -811,6 +812,9 @@ function App() {
 
         {/* News Debug Console - Admin Only */}
         {isAdmin && <NewsDebugConsole />}
+
+        {/* Raw Feed Panel - Admin Only */}
+        {isAdmin && <RawFeedPanel />}
 
         {/* Signal Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

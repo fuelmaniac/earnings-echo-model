@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/news-watchdog",
-      "schedule": "0 * * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/outcome-cron",
