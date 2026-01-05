@@ -25,16 +25,33 @@ import {
  * - KV_REST_API_TOKEN: Vercel KV auth token
  * - NEWS_WATCHDOG_CRON_SECRET: (Optional) Secret for authenticating cron calls
  * - FINNHUB_API_KEY: (Required for news) Finnhub API key for fetching general news
+ * - NEWSAPI_KEY: (Optional) NewsAPI.org fallback when Finnhub fails/low results
  */
 
 const MAJOR_EVENTS_KEY = "major_events";
 const MAX_STORED_EVENTS = 100;
-const IMPORTANCE_THRESHOLD = 50; // Only store events with importance >= 50
+const IMPORTANCE_THRESHOLD_HIGH = 50; // Normal threshold for events
+const IMPORTANCE_THRESHOLD_LOW = 30; // Lower threshold when provider supply is sparse
+const IMPORTANCE_THRESHOLD_MACRO = 20; // Even lower for Tier-0 macro matches
 const DAILY_GPT_CAP = 50; // Maximum GPT calls per day to control costs
 const PROCESSED_URLS_KEY = "news:processedUrls"; // Track processed article URLs
 const LAST_MIN_ID_KEY = "news:lastMinId"; // Track last minimum Finnhub news id processed
 const PREFILTER_THRESHOLD = 10; // Minimum prefilter score to send to GPT (0 = send all)
 const MAX_RAW_LOG_PER_RUN = 200; // Cap raw items logged per run to avoid flooding
+const MIN_FETCH_FOR_HEALTHY = 10; // Below this, trigger fallback
+const LOOKBACK_HOURS = 2; // Filter news older than this
+const SNAPSHOT_KEY = "news:lastRawSnapshot"; // Last run snapshot for admin debug
+const HEALTH_KEY = "news:health:last"; // Health status for admin banner
+
+// Tier-0 Macro keywords - if matched, bypass/lower threshold
+const MACRO_KEYWORDS = [
+  "coup", "assassination", "sanctions", "venezuela", "opec", "earthquake",
+  "missile", "default", "imf", "central bank", "election", "protests",
+  "invasion", "hostage", "pipeline", "strike", "bankruptcy", "war",
+  "nuclear", "fed", "interest rate", "tariff", "embargo", "martial law",
+  "arrested", "captured", "president", "raid", "extradition", "indictment",
+  "terror", "attack", "explosion", "ceasefire"
+];
 
 /**
  * Validates the cron request authentication
@@ -68,43 +85,164 @@ function validateCronAuth(req) {
 }
 
 /**
- * Fetches latest news headlines from Finnhub general news
- * @returns {Promise<Array<{id: number, headline: string, body: string|null, source: string, url: string, publishedAt: string}>>}
+ * Canonical URL normalization: strip tracking params (utm_*, gclid, fbclid) for stable dedup
+ * @param {string} url
+ * @returns {string} - Normalized URL
  */
-async function fetchLatestNews() {
-  const finnhubApiKey = process.env.FINNHUB_API_KEY;
-
-  if (finnhubApiKey) {
-    // Production: Fetch from Finnhub general news
-    try {
-      const response = await fetch(
-        `https://finnhub.io/api/v1/news?category=general&token=${finnhubApiKey}`
-      );
-
-      if (!response.ok) {
-        console.error('Finnhub API error:', response.status);
-        return [];
+function canonicalizeUrl(url) {
+  if (!url) return url;
+  try {
+    const parsed = new URL(url);
+    const paramsToRemove = [];
+    for (const key of parsed.searchParams.keys()) {
+      if (key.startsWith('utm_') || key === 'gclid' || key === 'fbclid' || key === 'ref' || key === 'source') {
+        paramsToRemove.push(key);
       }
+    }
+    paramsToRemove.forEach(k => parsed.searchParams.delete(k));
+    return parsed.toString();
+  } catch {
+    return url; // Return as-is if invalid URL
+  }
+}
 
-      const data = await response.json();
-
-      // Finnhub returns array of news items with id, headline, summary, source, url, datetime
-      return (data || []).map(item => ({
-        id: item.id,
-        headline: item.headline,
-        body: item.summary || null,
-        source: item.source || 'Unknown',
-        url: item.url,
-        publishedAt: item.datetime ? new Date(item.datetime * 1000).toISOString() : new Date().toISOString()
-      }));
-    } catch (error) {
-      console.error('Failed to fetch from Finnhub:', error);
-      return [];
+/**
+ * Check if headline/summary matches any Tier-0 macro keywords
+ * @param {string} headline
+ * @param {string|null} summary
+ * @returns {{ macroMatch: boolean, matchedKeywords: string[] }}
+ */
+function checkMacroMatch(headline, summary) {
+  const text = `${headline || ''} ${summary || ''}`.toLowerCase();
+  const matchedKeywords = [];
+  for (const keyword of MACRO_KEYWORDS) {
+    if (text.includes(keyword)) {
+      matchedKeywords.push(keyword);
     }
   }
+  return {
+    macroMatch: matchedKeywords.length > 0,
+    matchedKeywords
+  };
+}
 
-  // No API key: Return empty (manual testing via POST)
-  return [];
+/**
+ * Fetches news from NewsAPI.org (fallback provider)
+ * @returns {Promise<{items: Array, status: number, error?: string}>}
+ */
+async function fetchFromNewsAPI() {
+  const apiKey = process.env.NEWSAPI_KEY;
+  if (!apiKey) {
+    return { items: [], status: 0, error: 'NEWSAPI_KEY not configured' };
+  }
+
+  try {
+    const response = await fetch(
+      `https://newsapi.org/v2/top-headlines?category=general&language=en&pageSize=100`,
+      {
+        headers: { 'X-Api-Key': apiKey }
+      }
+    );
+
+    const status = response.status;
+    if (!response.ok) {
+      console.error('NewsAPI error:', status);
+      return { items: [], status, error: `NewsAPI returned ${status}` };
+    }
+
+    const data = await response.json();
+    if (data.status !== 'ok') {
+      return { items: [], status, error: data.message || 'NewsAPI error' };
+    }
+
+    // Normalize NewsAPI items to our format
+    const items = (data.articles || []).map((article, idx) => ({
+      id: `newsapi_${Date.now()}_${idx}`,
+      headline: article.title,
+      body: article.description || article.content || null,
+      source: article.source?.name || 'NewsAPI',
+      url: canonicalizeUrl(article.url),
+      publishedAt: article.publishedAt || new Date().toISOString(),
+      provider: 'newsapi'
+    }));
+
+    return { items, status };
+  } catch (error) {
+    console.error('Failed to fetch from NewsAPI:', error);
+    return { items: [], status: 0, error: error.message };
+  }
+}
+
+/**
+ * Stores health status for admin banner
+ * @param {'warn'|'error'} level
+ * @param {string} provider
+ * @param {number} status
+ * @param {string} message
+ * @param {string|null} error
+ */
+async function storeHealthStatus(level, provider, status, message, error = null) {
+  const health = {
+    ts: new Date().toISOString(),
+    level,
+    provider,
+    status,
+    message,
+    error
+  };
+  // 3 days TTL
+  await kv.set(HEALTH_KEY, health, { ex: 86400 * 3 });
+}
+
+/**
+ * Stores last run snapshot for admin debug view
+ * @param {object} snapshot
+ */
+async function storeSnapshot(snapshot) {
+  // 24 hours TTL
+  await kv.set(SNAPSHOT_KEY, snapshot, { ex: 86400 });
+}
+
+/**
+ * Fetches latest news headlines from Finnhub general news
+ * @returns {Promise<{items: Array, status: number, error?: string}>}
+ */
+async function fetchFromFinnhub() {
+  const finnhubApiKey = process.env.FINNHUB_API_KEY;
+
+  if (!finnhubApiKey) {
+    return { items: [], status: 0, error: 'FINNHUB_API_KEY not configured' };
+  }
+
+  try {
+    const response = await fetch(
+      `https://finnhub.io/api/v1/news?category=general&token=${finnhubApiKey}`
+    );
+
+    const status = response.status;
+    if (!response.ok) {
+      console.error('Finnhub API error:', status);
+      return { items: [], status, error: `Finnhub returned ${status}` };
+    }
+
+    const data = await response.json();
+
+    // Finnhub returns array of news items with id, headline, summary, source, url, datetime
+    const items = (data || []).map(item => ({
+      id: item.id,
+      headline: item.headline,
+      body: item.summary || null,
+      source: item.source || 'Unknown',
+      url: canonicalizeUrl(item.url),
+      publishedAt: item.datetime ? new Date(item.datetime * 1000).toISOString() : new Date().toISOString(),
+      provider: 'finnhub'
+    }));
+
+    return { items, status };
+  } catch (error) {
+    console.error('Failed to fetch from Finnhub:', error);
+    return { items: [], status: 0, error: error.message };
+  }
 }
 
 /**
@@ -243,19 +381,34 @@ export default async function handler(req, res) {
     const processedUrls = await getProcessedUrls();
     const lastMinId = await getLastMinId();
     const finnhubConfigured = !!process.env.FINNHUB_API_KEY;
+    const newsapiConfigured = !!process.env.NEWSAPI_KEY;
+
+    // Snapshot data for admin debug
+    const snapshotData = {
+      ts: new Date().toISOString(),
+      ok: true,
+      primary: { provider: 'finnhub', status: 0, fetchedCount: 0, error: null },
+      fallback: { provider: 'newsapi', used: false, status: 0, fetchedCount: 0, error: null },
+      keptCount: 0,
+      droppedCount: 0,
+      items: []
+    };
 
     // Diagnostic info to include in response
     const diagnostics = {
       dailyCountBefore,
       dailyCap: DAILY_GPT_CAP,
-      threshold: IMPORTANCE_THRESHOLD,
+      thresholdHigh: IMPORTANCE_THRESHOLD_HIGH,
+      thresholdLow: IMPORTANCE_THRESHOLD_LOW,
       finnhubConfigured,
+      newsapiConfigured,
       processedUrlsCount: processedUrls.size,
       lastMinId
     };
 
     let newsItems = [];
-    let newsSource = 'none';
+    let fallbackUsed = false;
+    let primaryFailed = false;
 
     // Mark run start time for metrics
     await setMetric("lastRunAt", new Date().toISOString());
@@ -275,33 +428,103 @@ export default async function handler(req, res) {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
       if (body.headline) {
         newsItems = [{
-          id: body.id || Date.now(), // Use provided id or generate one
+          id: body.id || Date.now(),
           headline: body.headline,
           body: body.body || null,
           source: body.source || 'Manual Test',
-          url: body.url || `manual:${Date.now()}`, // Generate unique URL for manual tests
-          publishedAt: new Date().toISOString()
+          url: canonicalizeUrl(body.url || `manual:${Date.now()}`),
+          publishedAt: new Date().toISOString(),
+          provider: 'manual'
         }];
-        newsSource = 'manual';
+        snapshotData.primary.provider = 'manual';
+        snapshotData.primary.status = 200;
+        snapshotData.primary.fetchedCount = 1;
       }
     } else {
-      // GET request: Fetch news automatically from Finnhub
-      newsItems = await fetchLatestNews();
-      newsSource = finnhubConfigured ? 'finnhub' : 'none';
+      // GET request: Fetch news with fallback logic
+      const finnhubResult = await fetchFromFinnhub();
+      snapshotData.primary.status = finnhubResult.status;
+      snapshotData.primary.fetchedCount = finnhubResult.items.length;
+      snapshotData.primary.error = finnhubResult.error || null;
+
+      const finnhubOk = finnhubResult.status === 200 || (finnhubResult.items.length > 0);
+      const finnhubHealthy = finnhubResult.items.length >= MIN_FETCH_FOR_HEALTHY;
+
+      // Check if we need fallback: Finnhub failed OR returned too few items
+      if (!finnhubOk || !finnhubHealthy) {
+        primaryFailed = !finnhubOk;
+        console.log(`Finnhub ${primaryFailed ? 'failed' : 'returned low count'} (${finnhubResult.items.length} items), trying NewsAPI fallback`);
+
+        if (newsapiConfigured) {
+          const newsapiResult = await fetchFromNewsAPI();
+          snapshotData.fallback.used = true;
+          snapshotData.fallback.status = newsapiResult.status;
+          snapshotData.fallback.fetchedCount = newsapiResult.items.length;
+          snapshotData.fallback.error = newsapiResult.error || null;
+
+          if (newsapiResult.items.length > 0) {
+            // Merge both sources, NewsAPI supplements Finnhub
+            const existingUrls = new Set(finnhubResult.items.map(i => i.url));
+            const uniqueNewsApi = newsapiResult.items.filter(i => !existingUrls.has(i.url));
+            newsItems = [...finnhubResult.items, ...uniqueNewsApi];
+            fallbackUsed = true;
+            console.log(`NewsAPI added ${uniqueNewsApi.length} unique items`);
+          } else {
+            newsItems = finnhubResult.items;
+          }
+
+          // Track health status
+          if (primaryFailed && newsapiResult.items.length === 0) {
+            // Both failed
+            await storeHealthStatus('error', 'finnhub+newsapi', finnhubResult.status,
+              'Both Finnhub and NewsAPI failed', finnhubResult.error || newsapiResult.error);
+            snapshotData.ok = false;
+          } else if (primaryFailed && newsapiResult.items.length > 0) {
+            // Primary failed but fallback worked
+            await storeHealthStatus('warn', 'finnhub', finnhubResult.status,
+              'Finnhub failed, using NewsAPI fallback', finnhubResult.error);
+          }
+        } else {
+          newsItems = finnhubResult.items;
+          if (primaryFailed) {
+            await storeHealthStatus('error', 'finnhub', finnhubResult.status,
+              'Finnhub failed and NewsAPI not configured', finnhubResult.error);
+            snapshotData.ok = false;
+          }
+        }
+      } else {
+        newsItems = finnhubResult.items;
+      }
     }
 
-    diagnostics.newsSource = newsSource;
     diagnostics.rawNewsCount = newsItems.length;
+    diagnostics.fallbackUsed = fallbackUsed;
 
     // Save last fetch info for debug endpoint
     await saveLastFetch(newsItems);
 
+    // Apply lookback window filter (last 2 hours)
+    const lookbackCutoff = Date.now() - (LOOKBACK_HOURS * 60 * 60 * 1000);
+    const recentItems = newsItems.filter(item => {
+      if (!item.publishedAt) return true; // Keep items without timestamp
+      const itemTime = new Date(item.publishedAt).getTime();
+      return itemTime >= lookbackCutoff;
+    });
+
+    diagnostics.filteredByLookback = newsItems.length - recentItems.length;
+
+    // Determine adaptive threshold based on fetch health
+    const useAdaptiveThreshold = fallbackUsed || newsItems.length < MIN_FETCH_FOR_HEALTHY;
+    const activeThreshold = useAdaptiveThreshold ? IMPORTANCE_THRESHOLD_LOW : IMPORTANCE_THRESHOLD_HIGH;
+    diagnostics.activeThreshold = activeThreshold;
+    diagnostics.adaptiveTriggered = useAdaptiveThreshold;
+
     // Log raw fetched items (capped to avoid flooding)
     await setMetric("rawFetchedLastRun", newsItems.length);
-    const itemsToLog = newsItems.slice(0, MAX_RAW_LOG_PER_RUN);
+    const itemsToLog = recentItems.slice(0, MAX_RAW_LOG_PER_RUN);
     for (const item of itemsToLog) {
       await logRawItem({
-        provider: newsSource === 'manual' ? 'manual' : 'finnhub',
+        provider: item.provider || 'unknown',
         providerId: item.id,
         datetime: item.publishedAt ? Math.floor(new Date(item.publishedAt).getTime() / 1000) : null,
         source: item.source,
@@ -313,24 +536,24 @@ export default async function handler(req, res) {
       await incrementMetric("rawLoggedCount", 1);
     }
 
-    // Filter out already-processed items and log decisions:
-    // - For Finnhub: filter by id > lastMinId
-    // - Also filter by URL for backwards compatibility
+    // Filter out already-processed items and enrich with macro detection
     const newItems = [];
-    for (const item of newsItems) {
+    for (const item of recentItems) {
       const itemHash = hashHeadline(item.headline, item.url);
       const { score: prefilterScore, reasons: prefilterReasons } = computePrefilterScore(item.headline, item.body);
+      const { macroMatch, matchedKeywords } = checkMacroMatch(item.headline, item.body);
 
-      // Check if already processed by URL
+      // Check if already processed by URL (canonical)
       if (processedUrls.has(item.url)) {
+        snapshotData.droppedCount++;
         await logDecision({
-          provider: newsSource === 'manual' ? 'manual' : 'finnhub',
+          provider: item.provider || 'unknown',
           providerId: item.id,
           headline: item.headline,
           hash: itemHash,
           prefilterScore,
           prefilterReasons,
-          threshold: IMPORTANCE_THRESHOLD,
+          threshold: activeThreshold,
           dailyCap: DAILY_GPT_CAP,
           dedupeHit: true,
           decision: DECISION_TYPES.SKIPPED_ALREADY_PROCESSED,
@@ -341,16 +564,17 @@ export default async function handler(req, res) {
         continue;
       }
 
-      // Check if already processed by ID
-      if (item.id && item.id <= lastMinId) {
+      // Check if already processed by ID (only for numeric Finnhub IDs)
+      if (typeof item.id === 'number' && item.id <= lastMinId) {
+        snapshotData.droppedCount++;
         await logDecision({
-          provider: newsSource === 'manual' ? 'manual' : 'finnhub',
+          provider: item.provider || 'unknown',
           providerId: item.id,
           headline: item.headline,
           hash: itemHash,
           prefilterScore,
           prefilterReasons,
-          threshold: IMPORTANCE_THRESHOLD,
+          threshold: activeThreshold,
           dailyCap: DAILY_GPT_CAP,
           dedupeHit: true,
           decision: DECISION_TYPES.SKIPPED_ALREADY_PROCESSED,
@@ -361,14 +585,26 @@ export default async function handler(req, res) {
         continue;
       }
 
-      // Item is new, add to processing queue
-      newItems.push({ ...item, prefilterScore, prefilterReasons, hash: itemHash });
+      // Item is new, add to processing queue with enrichment
+      newItems.push({
+        ...item,
+        prefilterScore,
+        prefilterReasons,
+        hash: itemHash,
+        macroMatch,
+        matchedKeywords,
+        tier: macroMatch ? 0 : null
+      });
     }
 
     diagnostics.newItemsCount = newItems.length;
-    diagnostics.skippedDuplicates = newsItems.length - newItems.length;
+    diagnostics.skippedDuplicates = recentItems.length - newItems.length;
 
     if (newItems.length === 0) {
+      // Store snapshot even when empty
+      snapshotData.items = [];
+      await storeSnapshot(snapshotData);
+
       return res.status(200).json({
         success: true,
         message: newsItems.length === 0
@@ -384,14 +620,15 @@ export default async function handler(req, res) {
     if (dailyCountBefore >= DAILY_GPT_CAP) {
       // Log decisions for all items that would be skipped due to daily cap
       for (const item of newItems) {
+        snapshotData.droppedCount++;
         await logDecision({
-          provider: newsSource === 'manual' ? 'manual' : 'finnhub',
+          provider: item.provider || 'unknown',
           providerId: item.id,
           headline: item.headline,
           hash: item.hash,
           prefilterScore: item.prefilterScore,
           prefilterReasons: item.prefilterReasons,
-          threshold: IMPORTANCE_THRESHOLD,
+          threshold: activeThreshold,
           dailyCap: DAILY_GPT_CAP,
           decision: DECISION_TYPES.SKIPPED_DAILY_CAP,
           decisionReason: `Daily GPT cap reached (${dailyCountBefore}/${DAILY_GPT_CAP})`,
@@ -399,6 +636,10 @@ export default async function handler(req, res) {
         await incrementMetric("skippedDailyCapCount", 1);
         await incrementMetric("decisionsLoggedCount", 1);
       }
+
+      // Store snapshot
+      await storeSnapshot(snapshotData);
+
       return res.status(200).json({
         success: true,
         message: `Daily GPT cap reached (${dailyCountBefore}/${DAILY_GPT_CAP})`,
@@ -424,14 +665,15 @@ export default async function handler(req, res) {
         // Log remaining items as skipped due to daily cap
         const remainingItems = newItems.slice(newItems.indexOf(item));
         for (const remainingItem of remainingItems) {
+          snapshotData.droppedCount++;
           await logDecision({
-            provider: newsSource === 'manual' ? 'manual' : 'finnhub',
+            provider: remainingItem.provider || 'unknown',
             providerId: remainingItem.id,
             headline: remainingItem.headline,
             hash: remainingItem.hash,
             prefilterScore: remainingItem.prefilterScore,
             prefilterReasons: remainingItem.prefilterReasons,
-            threshold: IMPORTANCE_THRESHOLD,
+            threshold: activeThreshold,
             dailyCap: DAILY_GPT_CAP,
             decision: DECISION_TYPES.SKIPPED_DAILY_CAP,
             decisionReason: `Daily GPT cap reached mid-run (${currentCount}/${DAILY_GPT_CAP})`,
@@ -454,9 +696,15 @@ export default async function handler(req, res) {
         // Mark URL as processed
         await markUrlProcessed(item.url);
 
+        // Determine effective threshold for this item
+        // Tier-0 macro matches get lower threshold
+        const itemThreshold = item.macroMatch ? IMPORTANCE_THRESHOLD_MACRO : activeThreshold;
+
         // Check if it's a major event worth storing
         let majorEventId = null;
-        if (analysis.importanceScore >= IMPORTANCE_THRESHOLD) {
+        const shouldStore = analysis.importanceScore >= itemThreshold;
+
+        if (shouldStore) {
           // Generate a unique event ID
           majorEventId = `evt_${Date.now()}_${item.hash.slice(0, 8)}`;
 
@@ -467,6 +715,10 @@ export default async function handler(req, res) {
             source: item.source,
             url: item.url,
             publishedAt: item.publishedAt,
+            provider: item.provider,
+            macroMatch: item.macroMatch,
+            matchedKeywords: item.matchedKeywords,
+            tier: item.tier,
             analysis
           };
 
@@ -477,27 +729,47 @@ export default async function handler(req, res) {
               id: majorEventId,
               headline: item.headline,
               importanceScore: analysis.importanceScore,
-              importanceCategory: analysis.importanceCategory
+              importanceCategory: analysis.importanceCategory,
+              macroMatch: item.macroMatch
             });
+            snapshotData.keptCount++;
           } else {
             majorEventId = null; // Failed to store
+            snapshotData.droppedCount++;
           }
+        } else {
+          snapshotData.droppedCount++;
         }
+
+        // Add to snapshot items
+        snapshotData.items.push({
+          headline: item.headline,
+          source: item.source,
+          url: item.url,
+          timestamp: item.publishedAt,
+          provider: item.provider,
+          macroMatch: item.macroMatch,
+          tier: item.tier,
+          importanceScore: analysis.importanceScore,
+          kept: shouldStore
+        });
 
         // Log the decision
         await logDecision({
-          provider: newsSource === 'manual' ? 'manual' : 'finnhub',
+          provider: item.provider || 'unknown',
           providerId: item.id,
           headline: item.headline,
           hash: item.hash,
           prefilterScore: item.prefilterScore,
           prefilterReasons: item.prefilterReasons,
-          threshold: IMPORTANCE_THRESHOLD,
+          threshold: itemThreshold,
           dailyCap: DAILY_GPT_CAP,
+          macroMatch: item.macroMatch,
+          matchedKeywords: item.matchedKeywords,
           decision: DECISION_TYPES.ANALYZED,
-          decisionReason: analysis.importanceScore >= IMPORTANCE_THRESHOLD
-            ? `Stored as major event (score ${analysis.importanceScore} >= ${IMPORTANCE_THRESHOLD})`
-            : `Below threshold (score ${analysis.importanceScore} < ${IMPORTANCE_THRESHOLD})`,
+          decisionReason: shouldStore
+            ? `Stored as major event (score ${analysis.importanceScore} >= ${itemThreshold}${item.macroMatch ? ', Tier-0 macro' : ''})`
+            : `Below threshold (score ${analysis.importanceScore} < ${itemThreshold})`,
           classifier: {
             used: true,
             importanceScore: analysis.importanceScore,
@@ -513,16 +785,30 @@ export default async function handler(req, res) {
       } catch (itemError) {
         console.error('Error processing news item:', item.headline, itemError);
         results.errors++;
+        snapshotData.droppedCount++;
+
+        // Add to snapshot with error
+        snapshotData.items.push({
+          headline: item.headline,
+          source: item.source,
+          url: item.url,
+          timestamp: item.publishedAt,
+          provider: item.provider,
+          macroMatch: item.macroMatch,
+          tier: item.tier,
+          error: itemError.message,
+          kept: false
+        });
 
         // Log the error decision
         await logDecision({
-          provider: newsSource === 'manual' ? 'manual' : 'finnhub',
+          provider: item.provider || 'unknown',
           providerId: item.id,
           headline: item.headline,
           hash: item.hash,
           prefilterScore: item.prefilterScore,
           prefilterReasons: item.prefilterReasons,
-          threshold: IMPORTANCE_THRESHOLD,
+          threshold: activeThreshold,
           dailyCap: DAILY_GPT_CAP,
           decision: DECISION_TYPES.ERROR,
           decisionReason: `Error during analysis: ${itemError.message}`,
@@ -540,14 +826,19 @@ export default async function handler(req, res) {
     const dailyCountAfter = await getDailyGptCount();
     diagnostics.dailyCountAfter = dailyCountAfter;
 
-    // Update lastMinId to the maximum id we processed (for Finnhub deduplication)
-    if (newItems.length > 0) {
-      const maxId = Math.max(...newItems.map(item => item.id || 0));
+    // Update lastMinId to the maximum numeric id we processed (for Finnhub deduplication)
+    const numericIds = newItems.filter(item => typeof item.id === 'number').map(item => item.id);
+    if (numericIds.length > 0) {
+      const maxId = Math.max(...numericIds);
       if (maxId > lastMinId) {
         await setLastMinId(maxId);
         diagnostics.newLastMinId = maxId;
       }
     }
+
+    // Store snapshot (limit to 50 items for storage efficiency)
+    snapshotData.items = snapshotData.items.slice(0, 50);
+    await storeSnapshot(snapshotData);
 
     return res.status(200).json({
       success: true,
