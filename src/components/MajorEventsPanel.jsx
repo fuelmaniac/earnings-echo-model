@@ -14,6 +14,7 @@ import {
   getBeginnerModeState,
   setBeginnerModeState
 } from '../utils/beginnerModeHelpers'
+import { useI18n } from '../i18n/I18nProvider'
 
 // Helper to format relative time
 function formatRelativeTime(dateString) {
@@ -80,6 +81,8 @@ function MajorEventsPanel() {
   // Beginner mode state
   const [beginnerMode, setBeginnerMode] = useState(false)
   const [explanationExpanded, setExplanationExpanded] = useState(false) // For collapsible "Ne demek?" block
+
+  const { t } = useI18n()
 
   // Check if admin mode is enabled via URL query param
   const isAdmin = useMemo(() => {
@@ -855,14 +858,14 @@ function MajorEventsPanel() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
-                    Generating...
+                    {t('generating')}
                   </>
                 ) : (
                   <>
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                     </svg>
-                    Generate Trade Signal
+                    {t('generateSignal')}
                   </>
                 )}
               </button>
@@ -877,7 +880,7 @@ function MajorEventsPanel() {
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                 </svg>
-                ▸ Show Trade Signal
+                ▸ {t('showSignal')}
                 {signal.cached && <span className="text-gray-600 ml-1">(cached)</span>}
               </button>
             )}
@@ -892,7 +895,7 @@ function MajorEventsPanel() {
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                   </svg>
-                  ▾ Hide Trade Signal
+                  ▾ {t('hideSignal')}
                   {signal.cached && <span className="text-gray-600 ml-1">(cached)</span>}
                 </button>
                 {renderTradeSignal(signal)}
@@ -937,9 +940,9 @@ function MajorEventsPanel() {
             </svg>
           </div>
           <div className="text-left">
-            <h2 className="text-lg font-semibold text-white">Major Events Feed</h2>
+            <h2 className="text-lg font-semibold text-white">{t('majorEvents')}</h2>
             <p className="text-xs text-gray-400">
-              {loading ? 'Loading...' : `${eventGroups.length} event group${eventGroups.length !== 1 ? 's' : ''} (${events.length} total)`}
+              {loading ? t('loading') : `${eventGroups.length} ${t('eventGroups')} (${events.length} ${t('total')})`}
             </p>
           </div>
         </button>
@@ -1080,8 +1083,7 @@ function MajorEventsPanel() {
               <svg className="w-12 h-12 text-gray-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
               </svg>
-              <p className="text-gray-400 text-sm">No major events yet</p>
-              <p className="text-gray-500 text-xs mt-1">Events will appear here as they're detected</p>
+              <p className="text-gray-400 text-sm">{t('noEvents')}</p>
             </div>
           )}
 
@@ -1151,7 +1153,7 @@ function MajorEventsPanel() {
                   <svg className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
-                  {refreshing ? 'Refreshing...' : 'Refresh'}
+                  {t('refresh')}
                 </button>
                 <button
                   onClick={() => fetchEvents(false, true)}
@@ -1167,12 +1169,12 @@ function MajorEventsPanel() {
                   <svg className={`w-4 h-4 ${forceRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
-                  {forceRefreshing ? 'Force refreshing...' : 'Force Refresh'}
+                  {t('forceRefresh')}
                 </button>
               </div>
               {lastUpdated && (
                 <span className="text-xs text-gray-500">
-                  Last updated: {formatTime(lastUpdated)}
+                  {t('lastUpdated')}: {formatTime(lastUpdated)}
                 </span>
               )}
             </div>
