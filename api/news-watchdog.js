@@ -1,5 +1,14 @@
 import { kv } from "@vercel/kv";
 import { analyzeNews } from "./_lib/newsIntel.js";
+import {
+  logRawItem,
+  logDecision,
+  incrementMetric,
+  setMetric,
+  hashHeadline,
+  computePrefilterScore,
+  DECISION_TYPES,
+} from "./_lib/newsDebugLog.js";
 
 /**
  * News Watchdog - Cron endpoint for periodic news monitoring
@@ -24,6 +33,8 @@ const IMPORTANCE_THRESHOLD = 50; // Only store events with importance >= 50
 const DAILY_GPT_CAP = 50; // Maximum GPT calls per day to control costs
 const PROCESSED_URLS_KEY = "news:processedUrls"; // Track processed article URLs
 const LAST_MIN_ID_KEY = "news:lastMinId"; // Track last minimum Finnhub news id processed
+const PREFILTER_THRESHOLD = 10; // Minimum prefilter score to send to GPT (0 = send all)
+const MAX_RAW_LOG_PER_RUN = 200; // Cap raw items logged per run to avoid flooding
 
 /**
  * Validates the cron request authentication
@@ -246,6 +257,9 @@ export default async function handler(req, res) {
     let newsItems = [];
     let newsSource = 'none';
 
+    // Mark run start time for metrics
+    await setMetric("lastRunAt", new Date().toISOString());
+
     // For POST requests, allow manual news injection for testing
     if (req.method === 'POST' && req.body) {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
@@ -269,16 +283,75 @@ export default async function handler(req, res) {
     diagnostics.newsSource = newsSource;
     diagnostics.rawNewsCount = newsItems.length;
 
-    // Filter out already-processed items:
+    // Log raw fetched items (capped to avoid flooding)
+    await setMetric("rawFetchedLastRun", newsItems.length);
+    const itemsToLog = newsItems.slice(0, MAX_RAW_LOG_PER_RUN);
+    for (const item of itemsToLog) {
+      await logRawItem({
+        provider: newsSource === 'manual' ? 'manual' : 'finnhub',
+        providerId: item.id,
+        datetime: item.publishedAt ? Math.floor(new Date(item.publishedAt).getTime() / 1000) : null,
+        source: item.source,
+        headline: item.headline,
+        summary: item.body,
+        url: item.url,
+        category: 'general',
+      });
+      await incrementMetric("rawLoggedCount", 1);
+    }
+
+    // Filter out already-processed items and log decisions:
     // - For Finnhub: filter by id > lastMinId
     // - Also filter by URL for backwards compatibility
-    const newItems = newsItems.filter(item => {
-      // Skip if URL already processed
-      if (processedUrls.has(item.url)) return false;
-      // Skip if id <= lastMinId (already processed in previous runs)
-      if (item.id && item.id <= lastMinId) return false;
-      return true;
-    });
+    const newItems = [];
+    for (const item of newsItems) {
+      const itemHash = hashHeadline(item.headline, item.url);
+      const { score: prefilterScore, reasons: prefilterReasons } = computePrefilterScore(item.headline, item.body);
+
+      // Check if already processed by URL
+      if (processedUrls.has(item.url)) {
+        await logDecision({
+          provider: newsSource === 'manual' ? 'manual' : 'finnhub',
+          providerId: item.id,
+          headline: item.headline,
+          hash: itemHash,
+          prefilterScore,
+          prefilterReasons,
+          threshold: IMPORTANCE_THRESHOLD,
+          dailyCap: DAILY_GPT_CAP,
+          dedupeHit: true,
+          decision: DECISION_TYPES.SKIPPED_ALREADY_PROCESSED,
+          decisionReason: `URL already processed: ${item.url}`,
+        });
+        await incrementMetric("skippedProcessedCount", 1);
+        await incrementMetric("decisionsLoggedCount", 1);
+        continue;
+      }
+
+      // Check if already processed by ID
+      if (item.id && item.id <= lastMinId) {
+        await logDecision({
+          provider: newsSource === 'manual' ? 'manual' : 'finnhub',
+          providerId: item.id,
+          headline: item.headline,
+          hash: itemHash,
+          prefilterScore,
+          prefilterReasons,
+          threshold: IMPORTANCE_THRESHOLD,
+          dailyCap: DAILY_GPT_CAP,
+          dedupeHit: true,
+          decision: DECISION_TYPES.SKIPPED_ALREADY_PROCESSED,
+          decisionReason: `ID ${item.id} <= lastMinId ${lastMinId}`,
+        });
+        await incrementMetric("skippedProcessedCount", 1);
+        await incrementMetric("decisionsLoggedCount", 1);
+        continue;
+      }
+
+      // Item is new, add to processing queue
+      newItems.push({ ...item, prefilterScore, prefilterReasons, hash: itemHash });
+    }
+
     diagnostics.newItemsCount = newItems.length;
     diagnostics.skippedDuplicates = newsItems.length - newItems.length;
 
@@ -296,6 +369,23 @@ export default async function handler(req, res) {
 
     // Check daily cap
     if (dailyCountBefore >= DAILY_GPT_CAP) {
+      // Log decisions for all items that would be skipped due to daily cap
+      for (const item of newItems) {
+        await logDecision({
+          provider: newsSource === 'manual' ? 'manual' : 'finnhub',
+          providerId: item.id,
+          headline: item.headline,
+          hash: item.hash,
+          prefilterScore: item.prefilterScore,
+          prefilterReasons: item.prefilterReasons,
+          threshold: IMPORTANCE_THRESHOLD,
+          dailyCap: DAILY_GPT_CAP,
+          decision: DECISION_TYPES.SKIPPED_DAILY_CAP,
+          decisionReason: `Daily GPT cap reached (${dailyCountBefore}/${DAILY_GPT_CAP})`,
+        });
+        await incrementMetric("skippedDailyCapCount", 1);
+        await incrementMetric("decisionsLoggedCount", 1);
+      }
       return res.status(200).json({
         success: true,
         message: `Daily GPT cap reached (${dailyCountBefore}/${DAILY_GPT_CAP})`,
@@ -318,6 +408,24 @@ export default async function handler(req, res) {
       const currentCount = await getDailyGptCount();
       if (currentCount >= DAILY_GPT_CAP) {
         console.log(`Daily GPT cap reached (${currentCount}/${DAILY_GPT_CAP}), stopping processing`);
+        // Log remaining items as skipped due to daily cap
+        const remainingItems = newItems.slice(newItems.indexOf(item));
+        for (const remainingItem of remainingItems) {
+          await logDecision({
+            provider: newsSource === 'manual' ? 'manual' : 'finnhub',
+            providerId: remainingItem.id,
+            headline: remainingItem.headline,
+            hash: remainingItem.hash,
+            prefilterScore: remainingItem.prefilterScore,
+            prefilterReasons: remainingItem.prefilterReasons,
+            threshold: IMPORTANCE_THRESHOLD,
+            dailyCap: DAILY_GPT_CAP,
+            decision: DECISION_TYPES.SKIPPED_DAILY_CAP,
+            decisionReason: `Daily GPT cap reached mid-run (${currentCount}/${DAILY_GPT_CAP})`,
+          });
+          await incrementMetric("skippedDailyCapCount", 1);
+          await incrementMetric("decisionsLoggedCount", 1);
+        }
         break;
       }
 
@@ -334,8 +442,13 @@ export default async function handler(req, res) {
         await markUrlProcessed(item.url);
 
         // Check if it's a major event worth storing
+        let majorEventId = null;
         if (analysis.importanceScore >= IMPORTANCE_THRESHOLD) {
+          // Generate a unique event ID
+          majorEventId = `evt_${Date.now()}_${item.hash.slice(0, 8)}`;
+
           const event = {
+            id: majorEventId,
             headline: item.headline,
             body: item.body,
             source: item.source,
@@ -348,15 +461,63 @@ export default async function handler(req, res) {
           if (stored) {
             results.majorEvents++;
             results.events.push({
+              id: majorEventId,
               headline: item.headline,
               importanceScore: analysis.importanceScore,
               importanceCategory: analysis.importanceCategory
             });
+          } else {
+            majorEventId = null; // Failed to store
           }
         }
+
+        // Log the decision
+        await logDecision({
+          provider: newsSource === 'manual' ? 'manual' : 'finnhub',
+          providerId: item.id,
+          headline: item.headline,
+          hash: item.hash,
+          prefilterScore: item.prefilterScore,
+          prefilterReasons: item.prefilterReasons,
+          threshold: IMPORTANCE_THRESHOLD,
+          dailyCap: DAILY_GPT_CAP,
+          decision: DECISION_TYPES.ANALYZED,
+          decisionReason: analysis.importanceScore >= IMPORTANCE_THRESHOLD
+            ? `Stored as major event (score ${analysis.importanceScore} >= ${IMPORTANCE_THRESHOLD})`
+            : `Below threshold (score ${analysis.importanceScore} < ${IMPORTANCE_THRESHOLD})`,
+          classifier: {
+            used: true,
+            importanceScore: analysis.importanceScore,
+            importanceCategory: analysis.importanceCategory,
+            marketRelevance: analysis.sectors?.length > 0 ? analysis.sectors[0].confidence : null,
+            summary: analysis.summary,
+          },
+          majorEventId,
+        });
+        await incrementMetric("analyzedCount", 1);
+        await incrementMetric("decisionsLoggedCount", 1);
+
       } catch (itemError) {
         console.error('Error processing news item:', item.headline, itemError);
         results.errors++;
+
+        // Log the error decision
+        await logDecision({
+          provider: newsSource === 'manual' ? 'manual' : 'finnhub',
+          providerId: item.id,
+          headline: item.headline,
+          hash: item.hash,
+          prefilterScore: item.prefilterScore,
+          prefilterReasons: item.prefilterReasons,
+          threshold: IMPORTANCE_THRESHOLD,
+          dailyCap: DAILY_GPT_CAP,
+          decision: DECISION_TYPES.ERROR,
+          decisionReason: `Error during analysis: ${itemError.message}`,
+          error: itemError.message,
+        });
+        await incrementMetric("errorsCount", 1);
+        await incrementMetric("decisionsLoggedCount", 1);
+
         // Still mark as processed to avoid retrying failed items
         await markUrlProcessed(item.url);
       }
