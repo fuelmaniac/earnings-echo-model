@@ -1,9 +1,10 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useStockQuote } from './hooks/useStockQuote'
 import { useEarningsInfo } from './hooks/useEarningsInfo'
 import NewsIntelPanel from './components/NewsIntelPanel'
 import MajorEventsPanel from './components/MajorEventsPanel'
 import MajorEventAlertBanner from './components/MajorEventAlertBanner'
+import NewsDebugConsole from './components/NewsDebugConsole'
 import PATTERN_HISTORY from './data/pattern-history.json'
 
 // Signal card data with sector information
@@ -723,6 +724,13 @@ function App() {
   const [selectedSector, setSelectedSector] = useState('All')
   const [alertModal, setAlertModal] = useState({ isOpen: false, card: null })
 
+  // Check for admin mode (?admin=1 in URL)
+  const isAdmin = useMemo(() => {
+    if (typeof window === 'undefined') return false
+    const params = new URLSearchParams(window.location.search)
+    return params.get('admin') === '1'
+  }, [])
+
   // Filter cards by sector
   const filteredCards = enrichedCards.filter(
     card => selectedSector === 'All' || card.sector === selectedSector
@@ -800,6 +808,9 @@ function App() {
 
         {/* Major Events Feed */}
         <MajorEventsPanel />
+
+        {/* News Debug Console - Admin Only */}
+        {isAdmin && <NewsDebugConsole />}
 
         {/* Signal Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
