@@ -1,11 +1,16 @@
 import React, { useState, useMemo } from 'react'
 import { useStockQuote } from './hooks/useStockQuote'
 import { useEarningsInfo } from './hooks/useEarningsInfo'
+import { useI18n } from './i18n/I18nProvider'
 import NewsIntelPanel from './components/NewsIntelPanel'
 import MajorEventsPanel from './components/MajorEventsPanel'
 import MajorEventAlertBanner from './components/MajorEventAlertBanner'
 import NewsDebugConsole from './components/NewsDebugConsole'
 import RawFeedPanel from './components/RawFeedPanel'
+import TabNavigation, { useTabState } from './components/TabNavigation'
+import LanguageToggle from './components/LanguageToggle'
+import StrengthBadge from './components/StrengthBadge'
+import { InfoTooltip } from './components/Tooltip'
 import PATTERN_HISTORY from './data/pattern-history.json'
 
 // Signal card data with sector information
@@ -353,6 +358,7 @@ function formatSession(hour) {
 
 // Signal Card Component
 function SignalCard({ card, onSetAlert }) {
+  const { t } = useI18n()
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [feedback, setFeedback] = useState(null)
 
@@ -364,18 +370,35 @@ function SignalCard({ card, onSetAlert }) {
   const { data: leaderEarnings, loading: leaderEarningsLoading, error: leaderEarningsError } = useEarningsInfo(card.trigger)
   const { data: followerEarnings, loading: followerEarningsLoading, error: followerEarningsError } = useEarningsInfo(card.echo)
 
-  const getConfidenceColor = (confidence) => {
-    switch (confidence) {
-      case 'Very High': return 'text-green-400 bg-green-400/10 border-green-400/30'
-      case 'High': return 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30'
-      case 'Medium': return 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30'
-      default: return 'text-gray-400 bg-gray-400/10 border-gray-400/30'
-    }
-  }
+  // Calculate pattern history summary
+  const historySummary = useMemo(() => {
+    const total = card.quarterlyHistory?.length || 0
+    const correct = card.quarterlyHistory?.filter(q => q.accurate).length || 0
+    return { correct, total }
+  }, [card.quarterlyHistory])
 
   const handleFeedback = (type) => {
     setFeedback(type)
     console.log(`Feedback for ${card.trigger}→${card.echo}: ${type}`)
+  }
+
+  // Translate sector names
+  const getSectorLabel = (sector) => {
+    const sectorKeys = {
+      'Technology': 'technology',
+      'Finance': 'finance',
+      'Automotive': 'automotive',
+      'Energy': 'energy'
+    }
+    return t(sectorKeys[sector] || sector.toLowerCase())
+  }
+
+  // Translate result labels
+  const getResultLabel = (result) => {
+    const resultLower = (result || '').toLowerCase()
+    if (resultLower === 'beat') return t('beat')
+    if (resultLower === 'miss') return t('miss')
+    return t('inline')
   }
 
   return (
@@ -400,11 +423,9 @@ function SignalCard({ card, onSetAlert }) {
               </span>
             </div>
           </div>
-          <span className="text-xs text-gray-400 bg-gray-700 px-2 py-1 rounded mt-1 inline-block">{card.sector}</span>
+          <span className="text-xs text-gray-400 bg-gray-700 px-2 py-1 rounded mt-1 inline-block">{getSectorLabel(card.sector)}</span>
         </div>
-        <span className={`text-xs px-2 py-1 rounded border ${getConfidenceColor(card.confidence)}`}>
-          {card.confidence}
-        </span>
+        <StrengthBadge correlation={card.correlation} accuracy={card.historicalAccuracy} />
       </div>
 
       {/* Live Prices */}
@@ -559,11 +580,17 @@ function SignalCard({ card, onSetAlert }) {
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="bg-gray-700/30 rounded-lg p-2 text-center">
-          <div className="text-xs text-gray-400">Correlation</div>
+          <div className="text-xs text-gray-400 flex items-center justify-center gap-1">
+            {t('correlation')}
+            <InfoTooltip content={t('correlationExplain')} />
+          </div>
           <div className="text-lg font-semibold text-blue-400">{card.correlation}</div>
         </div>
         <div className="bg-gray-700/30 rounded-lg p-2 text-center">
-          <div className="text-xs text-gray-400">Accuracy</div>
+          <div className="text-xs text-gray-400 flex items-center justify-center gap-1">
+            {t('accuracy')}
+            <InfoTooltip content={t('accuracyExplain')} />
+          </div>
           <div className="text-lg font-semibold text-green-400">{card.historicalAccuracy}%</div>
         </div>
       </div>
@@ -574,7 +601,14 @@ function SignalCard({ card, onSetAlert }) {
           onClick={() => setIsHistoryOpen(!isHistoryOpen)}
           className="w-full flex items-center justify-between p-2 bg-gray-700/30 rounded-lg hover:bg-gray-700/50 transition-colors"
         >
-          <span className="text-sm text-gray-300">Pattern History (8 Quarters)</span>
+          <div className="flex flex-col items-start gap-0.5">
+            <span className="text-sm text-gray-300">
+              {t('patternHistoryQuarters', { count: historySummary.total })}
+            </span>
+            <span className="text-xs text-green-400">
+              {t('summaryCorrect', { correct: historySummary.correct, total: historySummary.total })}
+            </span>
+          </div>
           <svg
             className={`w-4 h-4 text-gray-400 transition-transform ${isHistoryOpen ? 'rotate-180' : ''}`}
             fill="none"
@@ -684,12 +718,12 @@ function SignalCard({ card, onSetAlert }) {
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
           </svg>
-          Set Alert
+          {t('setAlert')}
         </button>
 
         {/* Feedback Buttons */}
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500 mr-1">Helpful?</span>
+          <span className="text-xs text-gray-500 mr-1">{t('helpful')}</span>
           <button
             onClick={() => handleFeedback('helpful')}
             className={`p-2 rounded-lg transition-colors ${
@@ -722,6 +756,7 @@ function SignalCard({ card, onSetAlert }) {
 
 // Main App Component
 function App() {
+  const { t } = useI18n()
   const [selectedSector, setSelectedSector] = useState('All')
   const [alertModal, setAlertModal] = useState({ isOpen: false, card: null })
 
@@ -731,6 +766,18 @@ function App() {
     const params = new URLSearchParams(window.location.search)
     return params.get('admin') === '1'
   }, [])
+
+  // Tab navigation state (persisted in localStorage)
+  const [activeTab, setActiveTab] = useTabState(isAdmin)
+
+  // Sector options with translation keys
+  const sectorOptions = useMemo(() => [
+    { value: 'All', labelKey: 'all' },
+    { value: 'Technology', labelKey: 'technology' },
+    { value: 'Finance', labelKey: 'finance' },
+    { value: 'Automotive', labelKey: 'automotive' },
+    { value: 'Energy', labelKey: 'energy' }
+  ], [])
 
   // Filter cards by sector
   const filteredCards = enrichedCards.filter(
@@ -752,31 +799,36 @@ function App() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-                Earnings Echo
+                {t('appTitle')}
               </h1>
               <p className="text-sm text-gray-400 mt-1">
-                Financial pattern recognition for earnings correlations
+                {t('appSubtitle')}
               </p>
             </div>
 
             {/* Controls */}
-            <div className="flex flex-wrap items-center gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Language Toggle */}
+              <LanguageToggle />
+
               {/* Live Data Indicator */}
               <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 rounded-lg border border-gray-700">
                 <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                <span className="text-sm text-gray-300">Live Market Data</span>
+                <span className="text-sm text-gray-300">{t('liveData')}</span>
               </div>
 
-              {/* Sector Filter */}
-              <select
-                value={selectedSector}
-                onChange={(e) => setSelectedSector(e.target.value)}
-                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
-              >
-                {SECTORS.map(sector => (
-                  <option key={sector} value={sector}>{sector}</option>
-                ))}
-              </select>
+              {/* Sector Filter - only shown on earnings tab */}
+              {activeTab === 'earnings' && (
+                <select
+                  value={selectedSector}
+                  onChange={(e) => setSelectedSector(e.target.value)}
+                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                >
+                  {sectorOptions.map(sector => (
+                    <option key={sector.value} value={sector.value}>{t(sector.labelKey)}</option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
         </div>
@@ -784,65 +836,83 @@ function App() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
-        {/* Stats Overview */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-            <div className="text-2xl font-bold text-white">{SIGNAL_CARDS.length}</div>
-            <div className="text-xs text-gray-400">Active Patterns</div>
-          </div>
-          <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-            <div className="text-2xl font-bold text-green-400">79%</div>
-            <div className="text-xs text-gray-400">Avg Accuracy</div>
-          </div>
-          <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-            <div className="text-2xl font-bold text-blue-400">0.79</div>
-            <div className="text-xs text-gray-400">Avg Correlation</div>
-          </div>
-          <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-            <div className="text-2xl font-bold text-purple-400">40</div>
-            <div className="text-xs text-gray-400">Quarters Analyzed</div>
-          </div>
-        </div>
+        {/* Tab Navigation */}
+        <TabNavigation
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          isAdmin={isAdmin}
+        />
 
-        {/* News Intelligence Panel */}
-        <NewsIntelPanel />
+        {/* Radar Tab - Major Events Feed */}
+        {activeTab === 'radar' && (
+          <MajorEventsPanel />
+        )}
 
-        {/* Major Events Feed */}
-        <MajorEventsPanel />
+        {/* Earnings Echo Tab - Signal Cards */}
+        {activeTab === 'earnings' && (
+          <>
+            {/* Stats Overview */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <div className="text-2xl font-bold text-white">{SIGNAL_CARDS.length}</div>
+                <div className="text-xs text-gray-400">{t('activePatterns')}</div>
+              </div>
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <div className="text-2xl font-bold text-green-400">79%</div>
+                <div className="text-xs text-gray-400">{t('avgAccuracy')}</div>
+              </div>
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <div className="text-2xl font-bold text-blue-400">0.79</div>
+                <div className="text-xs text-gray-400">{t('avgCorrelation')}</div>
+              </div>
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <div className="text-2xl font-bold text-purple-400">40</div>
+                <div className="text-xs text-gray-400">{t('quartersAnalyzed')}</div>
+              </div>
+            </div>
 
-        {/* News Debug Console - Admin Only */}
-        {isAdmin && <NewsDebugConsole />}
+            {/* Signal Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredCards.map(card => (
+                <SignalCard
+                  key={card.id}
+                  card={card}
+                  onSetAlert={handleSetAlert}
+                />
+              ))}
+            </div>
 
-        {/* Raw Feed Panel - Admin Only */}
-        {isAdmin && <RawFeedPanel />}
+            {/* Empty State */}
+            {filteredCards.length === 0 && (
+              <div className="text-center py-12">
+                <svg className="w-16 h-16 text-gray-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-gray-400">{t('noPatterns')}</p>
+              </div>
+            )}
+          </>
+        )}
 
-        {/* Signal Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredCards.map(card => (
-            <SignalCard
-              key={card.id}
-              card={card}
-              onSetAlert={handleSetAlert}
-            />
-          ))}
-        </div>
+        {/* News Analysis Tab */}
+        {activeTab === 'news' && (
+          <NewsIntelPanel />
+        )}
 
-        {/* Empty State */}
-        {filteredCards.length === 0 && (
-          <div className="text-center py-12">
-            <svg className="w-16 h-16 text-gray-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <p className="text-gray-400">No patterns found for the selected sector</p>
-          </div>
+        {/* Admin Tab - Debug Tools */}
+        {activeTab === 'admin' && isAdmin && (
+          <>
+            <NewsDebugConsole />
+            <RawFeedPanel />
+          </>
         )}
       </main>
 
       {/* Footer */}
       <footer className="border-t border-gray-800 mt-12 py-6">
         <div className="max-w-7xl mx-auto px-4 text-center text-sm text-gray-500">
-          <p>Earnings Echo - Pattern recognition for informed trading decisions</p>
-          <p className="mt-1">Data is for informational purposes only. Not financial advice.</p>
+          <p>{t('patternRecognition')}</p>
+          <p className="mt-1">{t('disclaimer')}</p>
         </div>
       </footer>
 
